@@ -1,0 +1,111 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace Statement;
+
+public class StateMachine
+{
+    private readonly HashSet<RegisteredStateBundle> _registeredStates;
+    private object? _currenState;
+    private readonly List<object> _states;
+
+    internal StateMachine()
+    {
+        _states = [];
+        _registeredStates = [];
+    }
+    
+    public void SetCurrentState<T>()
+    {
+        var state = _states.FirstOrDefault(s => s is T);
+        if (state is not null)
+        {
+            var previousState = _currenState;
+            _currenState = state;
+            InvokeOnEntry(state, previousState);
+            return;
+        }
+        else
+        {
+            var bundle = _registeredStates.FirstOrDefault(s => s.RegisteredState == typeof(T));
+            if (bundle is null)
+            {
+                return;
+            }
+
+            var instance = Activator.CreateInstance(bundle.RegisteredState);
+            _states.Add(instance);
+            var previousState = _currenState;
+            _currenState = instance;
+            InvokeOnEntry(instance, previousState);
+        }
+    }
+
+    public T GetCurrentState<T>() where T : class
+    {
+        if (_currenState is T state)
+        {
+            return state;
+        }
+        throw new InvalidOperationException();
+    }
+    
+    public T TryGetCurrentState<T>(out bool result) where T : class
+    {
+        if (_currenState is T state)
+        {
+            result = true;
+            return state;
+        }
+
+        result = false;
+        return default;
+    }
+
+    public object? GetCurrentState()
+    {
+        return _currenState;
+    }
+
+    internal void RegisterInnerState<TState>() where TState : class, new()
+        => _registeredStates.Add(new RegisteredStateBundle(typeof(TState)));
+
+    internal void AddOnEntry(Type stateType, Action<StateMachine> callback)
+    {
+        var bundle = _registeredStates.FirstOrDefault(s => s.RegisteredState == stateType);
+        bundle?.OnEntryCallback = callback;
+    }
+    
+    internal void AddOnExit(Type stateType, Action<StateMachine> callback)
+    {
+        var bundle = _registeredStates.FirstOrDefault(s => s.RegisteredState == stateType);
+        bundle?.OnExitCallback = callback;
+    }
+
+    internal void Compile()
+    {
+        foreach (var registeredStateBundle in _registeredStates)
+        {
+            var instance = Activator.CreateInstance(registeredStateBundle.RegisteredState);
+            _states.Add(instance);
+        }
+    }
+
+    private void InvokeOnEntry(object state, object? previousState)
+    {
+        var callback = _registeredStates.FirstOrDefault(s => s.RegisteredState == state.GetType())?.OnEntryCallback;
+        callback?.Invoke(this);
+
+        if (previousState is not null)
+        {
+            InvokeOnExit(previousState);
+        }
+    }
+    
+    private void InvokeOnExit(object state)
+    {
+        var callback = _registeredStates.FirstOrDefault(s => s.RegisteredState == state.GetType())?.OnExitCallback;
+        callback?.Invoke(this);
+    }
+}
