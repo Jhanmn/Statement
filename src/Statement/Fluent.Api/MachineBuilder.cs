@@ -15,6 +15,7 @@ public static class MachineBuilder
         }
 
         public void Compile() => machine.Compile();
+        public void CompileAgainst<T>() => machine.CompileAgainst<T>();
     }
 
 

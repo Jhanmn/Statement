@@ -7,10 +7,13 @@ namespace Statement;
 
 public class StateMachine : IStateMachine
 {
+    private Type? _innerParentType;
     private readonly HashSet<RegisteredStateBundle> _registeredStates = [];
     private object? _currenState;
     private readonly List<object> _states = [];
 
+    private bool IsCompiledWithType => _innerParentType is not null;
+    
     public void SetCurrentState<T>()
     {
         if (!CheckTransitionRule<T>(_currenState))
@@ -104,6 +107,27 @@ public class StateMachine : IStateMachine
             _states.Add(instance);
         }
     }
+
+    internal void CompileAgainst<T>()
+    {
+        if (IsCompiledWithType)
+        {
+            return;
+        }
+        
+        foreach (var registeredStateBundle in _registeredStates)
+        {
+            if(!typeof(T).IsAssignableFrom(registeredStateBundle.RegisteredState))
+            {
+                throw new InvalidOperationException();
+            }
+
+            var instance = Activator.CreateInstance(registeredStateBundle.RegisteredState);
+            _states.Add(instance);
+        }
+        _innerParentType = typeof(T);
+    }
+    
 
     private void InvokeOnEntry(object state, object? previousState)
     {
