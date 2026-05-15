@@ -5,7 +5,7 @@ using Statement.Rules;
 
 namespace Statement;
 
-public class StateMachine
+public class StateMachine : IStateMachine
 {
     private readonly HashSet<RegisteredStateBundle> _registeredStates = [];
     private object? _currenState;
