@@ -5,7 +5,7 @@ using Statement.Fluent.Api;
 namespace Builder.Tests;
 
 [TestFixture]
-public class StateMachineTests
+public class CompileStateMachineTests
 {
     private StateMachine _machine;
     
@@ -31,7 +31,7 @@ public class StateMachineTests
     {
         _machine.AddState<SimpleUnitTestState>();
         _machine.AddState<AdvancedUnitTestState>();
-        _machine.AddState<StateMachineTests>();//invalid - not a state
+        _machine.AddState<StatementStateMachineTests>();//invalid - not a state
         
         Assert.Throws<InvalidOperationException>(() => _machine.CompileAgainst<IUnitTestState>());
     }
@@ -41,7 +41,7 @@ public class StateMachineTests
     {
         _machine.AddState<SimpleUnitTestState>();
         _machine.AddState<AdvancedUnitTestState>();
-        _machine.AddState<StateMachineTests>();
+        _machine.AddState<StatementStateMachineTests>();
 
         _machine.Compile();
         Assert.Pass();        

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Statement.Rules;
+using Statement.State;
 
 namespace Statement;
 
@@ -29,6 +30,7 @@ public class StateMachine : IStateMachine
         {
             var previousState = _currenState;
             _currenState = state;
+
             InvokeOnEntry(state, previousState);
             return;
         }
@@ -133,6 +135,11 @@ public class StateMachine : IStateMachine
 
     private void InvokeOnEntry(object state, object? previousState)
     {
+        if (state is IStatement statement)
+        {
+            statement.OnEntry();
+        }
+        
         var callback = _registeredStates.FirstOrDefault(s => s.RegisteredState == state.GetType())?.OnEntryCallback;
         callback?.Invoke(this);
 
@@ -144,6 +151,11 @@ public class StateMachine : IStateMachine
     
     private void InvokeOnExit(object state)
     {
+        if (state is IStatement statement)
+        {
+            statement.OnExit();
+        }
+        
         var callback = _registeredStates.FirstOrDefault(s => s.RegisteredState == state.GetType())?.OnExitCallback;
         callback?.Invoke(this);
     }
