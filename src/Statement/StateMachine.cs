@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Statement.Failures;
 using Statement.Rules;
 
 namespace Statement;
@@ -11,14 +12,14 @@ namespace Statement;
 /// </summary>
 public class StateMachine : IStateMachine
 {
-    internal StateMachine() { }
-
     private Type? _innerParentType;
     private readonly Dictionary<Type, StateNode> _nodes = new();
     private StateNode? _current;
-
     private readonly RuleMaster _ruleMaster = new();
     private readonly TransitionExecutor _transitionExecutor = new();
+    
+    internal StateMachine() { }
+    internal TransitionFailurePolicy FailurePolicy { get; set; } = TransitionFailurePolicy.Silent;
 
     private bool IsCompiledWithType => _innerParentType is not null;
 
@@ -34,11 +35,12 @@ public class StateMachine : IStateMachine
     {
         if (!_nodes.TryGetValue(stateType, out var target))
         {
-            return;
+            throw new InvalidOperationException($"State {stateType} is not registered.");
         }
 
         if (!_ruleMaster.IsAllowed(_current, target))
         {
+            FailurePolicy.Handle(new TransitionFailureInfo(_current?.Type, stateType));
             return;
         }
 

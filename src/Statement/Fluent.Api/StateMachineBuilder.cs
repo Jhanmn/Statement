@@ -1,4 +1,5 @@
 using System;
+using Statement.Failures;
 
 namespace Statement.Fluent.Api;
 
@@ -87,6 +88,21 @@ public sealed class StateMachineBuilder<TBase> where TBase : class
         if (configure is null) throw new ArgumentNullException(nameof(configure));
         _machine.RegisterInnerState(instance);
         configure(new StateBuilder<TState>(_machine));
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the policy used when a transition is blocked by a configured rule.
+    /// Defaults to <see cref="TransitionFailurePolicy.Silent"/>.
+    /// Attempts to switch to an unregistered state always throw, regardless of this policy.
+    /// </summary>
+    /// <param name="policy">The policy to apply. Use <see cref="TransitionFailurePolicy.Silent"/>,
+    /// <see cref="TransitionFailurePolicy.Throw"/>, or <see cref="TransitionFailurePolicy.Invoke"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="policy"/> is <c>null</c>.</exception>
+    public StateMachineBuilder<TBase> OnTransitionFailure(TransitionFailurePolicy policy)
+    {
+        if (policy is null) throw new ArgumentNullException(nameof(policy));
+        _machine.FailurePolicy = policy;
         return this;
     }
 

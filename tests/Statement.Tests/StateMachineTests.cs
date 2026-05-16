@@ -36,11 +36,11 @@ public class StateMachineTests
     }
 
     [Test]
-    public void SetCurrentState_UnregisteredType_LeavesCurrentUnchanged()
+    public void SetCurrentState_UnregisteredType_Throws()
     {
         _machine.SetCurrentState<SimpleUnitTestState>();
-        _machine.SetCurrentState<UnregisteredState>();
 
+        Assert.Throws<InvalidOperationException>(() => _machine.SetCurrentState<UnregisteredState>());
         Assert.That(_machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
     }
 

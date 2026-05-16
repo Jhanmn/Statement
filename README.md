@@ -61,7 +61,32 @@ var machine = StateMachineBuilder.New()
     .Build();
 ```
 
-Attempts to switch into any forbidden target while `Running` is active are silently ignored.
+Attempts to switch into any forbidden target while `Running` is active are silently ignored by default. See the next section to change that.
+
+### Handling failed transitions
+
+By default, transitions blocked by a `CannotTransitionTo` rule are silently ignored. Configure a different policy via `OnTransitionFailure`:
+
+```csharp
+using Statement.Failures;
+
+// Throw on blocked transitions
+var machine = StateMachineBuilder.New()
+    .OnTransitionFailure(TransitionFailurePolicy.Throw)
+    .AddState<Running>(s => s.CannotTransitionTo<Idle>())
+    .AddState<Idle>()
+    .Build();
+
+// Or run a custom callback
+var machine2 = StateMachineBuilder.New()
+    .OnTransitionFailure(TransitionFailurePolicy.Invoke(info =>
+        Console.WriteLine($"blocked: {info.From?.Name} -> {info.To.Name}")))
+    .AddState<Running>(s => s.CannotTransitionTo<Idle>())
+    .AddState<Idle>()
+    .Build();
+```
+
+Attempting to switch to a state that was never registered always throws `InvalidOperationException`, regardless of the configured policy.
 
 ### Typed machine with a shared base type
 
