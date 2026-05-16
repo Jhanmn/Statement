@@ -1,8 +1,8 @@
-using Builder.Tests.TestStates;
-using Builder.Tests.TestStates.Statement;
+using Statement.Tests.TestStates;
+using Statement.Tests.TestStates.Statement;
 using Statement.Fluent.Api;
 
-namespace Builder.Tests;
+namespace Statement.Tests;
 
 [TestFixture]
 public class StatementStateMachineTests

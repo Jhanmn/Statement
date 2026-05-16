@@ -1,6 +1,6 @@
 using Statement.State;
 
-namespace Builder.Tests.TestStates.Statement;
+namespace Statement.Tests.TestStates.Statement;
 
 public class SimpleStatement : IStatement
 {

@@ -1,4 +1,4 @@
-namespace Builder.Tests.TestStates;
+namespace Statement.Tests.TestStates;
 
 public class ExtraUnitTestState : IUnitTestState
 {

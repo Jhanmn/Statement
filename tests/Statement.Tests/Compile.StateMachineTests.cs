@@ -1,8 +1,7 @@
-using Builder.Tests.TestStates;
-using NUnit.Framework;
+using Statement.Tests.TestStates;
 using Statement.Fluent.Api;
 
-namespace Builder.Tests;
+namespace Statement.Tests;
 
 [TestFixture]
 public class CompileStateMachineTests

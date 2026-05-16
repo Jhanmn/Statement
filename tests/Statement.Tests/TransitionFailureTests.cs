@@ -1,9 +1,9 @@
 using System;
-using Builder.Tests.TestStates;
+using Statement.Tests.TestStates;
 using Statement.Failures;
 using Statement.Fluent.Api;
 
-namespace Builder.Tests;
+namespace Statement.Tests;
 
 [TestFixture]
 public class TransitionFailureTests
