@@ -96,13 +96,34 @@ public class TypedStateMachineTests
     public void TypedMachine_RespectsTransitionRules()
     {
         var machine = StateMachineBuilder.For<IUnitTestState>()
-            .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
+            .AddState<SimpleUnitTestState>(state 
+                => state.CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
             .BuildTyped();
 
         machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
+    public void CannotTransitionTo_ChainedCalls_ForbidsAllTargets()
+    {
+        var machine = StateMachineBuilder.For<IUnitTestState>()
+            .AddState<SimpleUnitTestState>(state => state
+                .CannotTransitionTo<AdvancedUnitTestState>()
+                .CannotTransitionTo<ExtraUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .AddState<ExtraUnitTestState>()
+            .BuildTyped();
+
+        machine.SetCurrentState<SimpleUnitTestState>();
+
+        machine.SetCurrentState<AdvancedUnitTestState>();
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+
+        machine.SetCurrentState<ExtraUnitTestState>();
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
     }
 }

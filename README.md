@@ -47,6 +47,22 @@ machine.SetCurrentState<Running>();          // fires Running.OnEntry
 var current = machine.GetCurrentState();     // returns the Running instance
 ```
 
+### Forbidding multiple transition targets
+
+Chain `CannotTransitionTo<T>()` to forbid more than one next state from the same source:
+
+```csharp
+var machine = StateMachineBuilder.New()
+    .AddState<Running>(s => s
+        .CannotTransitionTo<Idle>()
+        .CannotTransitionTo<Faulted>())
+    .AddState<Idle>()
+    .AddState<Faulted>()
+    .Build();
+```
+
+Attempts to switch into any forbidden target while `Running` is active are silently ignored.
+
 ### Typed machine with a shared base type
 
 ```csharp
