@@ -12,13 +12,16 @@ public static class StateMachineBuilder
 
 public sealed class StateMachineBuilder<TBase> where TBase : class
 {
-    private readonly StateMachine _machine = new();
+    private readonly StateMachine _machine;
     private readonly bool _requireBaseType;
     private Type? _initialState;
 
     internal StateMachineBuilder(bool requireBaseType)
     {
         _requireBaseType = requireBaseType;
+        _machine = requireBaseType && typeof(TBase) != typeof(object)
+            ? new StateMachine<TBase>()
+            : new StateMachine();
     }
 
     public StateMachineBuilder<TBase> AddState<TState>() where TState : class, TBase, new()
@@ -56,5 +59,16 @@ public sealed class StateMachineBuilder<TBase> where TBase : class
         }
 
         return _machine;
+    }
+
+    public StateMachine<TBase> BuildTyped()
+    {
+        if (!_requireBaseType || typeof(TBase) == typeof(object))
+        {
+            throw new InvalidOperationException(
+                "BuildTyped requires a builder created via StateMachineBuilder.For<TBase>().");
+        }
+
+        return (StateMachine<TBase>)Build();
     }
 }
