@@ -15,6 +15,7 @@ In Statement, **each state is its own class**. Transitions are expressed by swit
 - Optional typed machines (`StateMachineBuilder.For<TBase>()`) for compile-time safety.
 - Register states by type (auto-instantiated) or by pre-built instance (for states with constructor arguments).
 - Built-in `IStatement` interface for states that prefer to own their own entry/exit logic.
+- Global transition callbacks via `AddOnStateChangedCallback` for cross-cutting concerns like logging.
 
 ## Quick start
 
@@ -87,6 +88,21 @@ var machine2 = StateMachineBuilder.New()
 ```
 
 Attempting to switch to a state that was never registered always throws `InvalidOperationException`, regardless of the configured policy.
+
+### Observing every transition
+
+Register a global callback to be notified whenever the machine moves to a new state. The callback runs after the previous state's `OnExit` and the current-state commit, but before the new state's `OnEntry`. Exceptions thrown from callbacks are swallowed so they cannot crash the machine.
+
+```csharp
+var machine = StateMachineBuilder.New()
+    .AddOnStateChangedCallback(info =>
+        Console.WriteLine($"{info.FromType?.Name} -> {info.ToType?.Name}"))
+    .AddState<Idle>()
+    .AddState<Running>()
+    .Build();
+```
+
+`AddOnStateChangedCallback` can be called multiple times to register more than one observer.
 
 ### Typed machine with a shared base type
 
