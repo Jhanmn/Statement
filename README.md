@@ -1,5 +1,9 @@
 # Statement
 
+[![CI](https://github.com/Jhanmn/Statement/actions/workflows/ci.yml/badge.svg)](https://github.com/Jhanmn/Statement/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Jhanmn/Statement)](License)
+[![.NET Standard 2.0](https://img.shields.io/badge/target-.NET%20Standard%202.0-512BD4)](https://learn.microsoft.com/dotnet/standard/net-standard)
+
 A lightweight, type-driven state machine library for .NET.
 
 In Statement, **each state is its own class**. Transitions are expressed by switching the machine's current state type, and entry/exit behavior lives either on the state itself (via `IStatement`) or on the machine through a fluent builder API. Optional base-type constraints let you guarantee at compile time that every state in a machine implements a common interface or inherits from a common base class.
