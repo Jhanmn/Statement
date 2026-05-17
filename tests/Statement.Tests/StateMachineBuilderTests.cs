@@ -13,9 +13,9 @@ public class StateMachineBuilderTests
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
 
         machine.SetCurrentState<AdvancedUnitTestState>();
@@ -28,9 +28,9 @@ public class StateMachineBuilderTests
         var machine = StateMachineBuilder.For<IUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         Assert.That(machine.GetCurrentState<IUnitTestState>(), Is.TypeOf<SimpleUnitTestState>());
     }
 
@@ -52,9 +52,8 @@ public class StateMachineBuilderTests
         var preBuilt = new SimpleUnitTestState();
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>(preBuilt)
+            .StartIn<SimpleUnitTestState>()
             .Build();
-
-        machine.SetCurrentState<SimpleUnitTestState>();
 
         Assert.That(machine.GetCurrentState(), Is.SameAs(preBuilt));
     }
@@ -65,6 +64,7 @@ public class StateMachineBuilderTests
         var preBuilt = new StateWithCtorArgs("hello");
         var machine = StateMachineBuilder.New()
             .AddState<StateWithCtorArgs>(preBuilt)
+            .StartIn<StateWithCtorArgs>()
             .Build();
 
         machine.SetCurrentState<StateWithCtorArgs>();
@@ -79,6 +79,7 @@ public class StateMachineBuilderTests
         var preBuilt = new StateWithCtorArgs("x");
 
         var machine = StateMachineBuilder.New()
+            .StartIn<StateWithCtorArgs>()
             .AddState<StateWithCtorArgs>(preBuilt, s => s.OnEntry((state, _) => captured = state))
             .Build();
 
@@ -116,9 +117,9 @@ public class StateMachineBuilderTests
         var preBuilt = new SimpleUnitTestState();
         var machine = StateMachineBuilder.For<IUnitTestState>()
             .AddState<SimpleUnitTestState>(preBuilt)
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         Assert.That(machine.GetCurrentState<IUnitTestState>(), Is.SameAs(preBuilt));
     }
 

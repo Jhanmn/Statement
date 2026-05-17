@@ -10,6 +10,7 @@ public class CompileStateMachineTests
     public void For_BaseType_HappyPath()
     {
         Assert.DoesNotThrow(() => StateMachineBuilder.For<IUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
             .Build());
@@ -23,6 +24,7 @@ public class CompileStateMachineTests
     public void New_AcceptsAnyState()
     {
         Assert.DoesNotThrow(() => StateMachineBuilder.New()
+            .StartIn<SimpleUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
             .Build());

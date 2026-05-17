@@ -12,6 +12,7 @@ public class TypedStateMachineTests
     {
         var machine = StateMachineBuilder.For<IUnitTestState>()
             .AddState<SimpleUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
 
         Assert.That(machine, Is.InstanceOf<StateMachine<IUnitTestState>>());
@@ -37,9 +38,9 @@ public class TypedStateMachineTests
         var machine = StateMachineBuilder.For<IUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
 
         machine.SetCurrentState<AdvancedUnitTestState>();
@@ -61,23 +62,11 @@ public class TypedStateMachineTests
     }
 
     [Test]
-    public void TryGetCurrentState_ReturnsFalseWhenNoCurrentState()
-    {
-        var machine = StateMachineBuilder.For<IUnitTestState>()
-            .AddState<SimpleUnitTestState>()
-            .BuildTyped();
-
-        var ok = machine.TryGetCurrentState(out IUnitTestState? current);
-
-        Assert.That(ok, Is.False);
-        Assert.That(current, Is.Null);
-    }
-
-    [Test]
     public void BuildTyped_OnUntypedBuilder_Throws()
     {
         var builder = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>();
+            .AddState<SimpleUnitTestState>()
+            .StartIn<SimpleUnitTestState>();
 
         Assert.Throws<InvalidOperationException>(() => builder.BuildTyped());
     }
@@ -87,6 +76,7 @@ public class TypedStateMachineTests
     {
         var machine = StateMachineBuilder.For<IUnitTestState>()
             .AddState<SimpleUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
         Assert.That(machine, Is.InstanceOf<StateMachine<IUnitTestState>>());
@@ -96,12 +86,12 @@ public class TypedStateMachineTests
     public void TypedMachine_RespectsTransitionRules()
     {
         var machine = StateMachineBuilder.For<IUnitTestState>()
-            .AddState<SimpleUnitTestState>(state 
+            .AddState<SimpleUnitTestState>(state
                 => state.CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
@@ -116,9 +106,8 @@ public class TypedStateMachineTests
                 .CannotTransitionTo<ExtraUnitTestState>())
             .AddState<AdvancedUnitTestState>()
             .AddState<ExtraUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
-
-        machine.SetCurrentState<SimpleUnitTestState>();
 
         machine.SetCurrentState<AdvancedUnitTestState>();
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());

@@ -13,8 +13,10 @@ public class StateMachineTests
     public void Setup()
     {
         _machine = StateMachineBuilder.New()
+            .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
             .Build();
     }
 
@@ -49,9 +51,8 @@ public class StateMachineTests
     {
         var machine = StateMachineBuilder.New()
             .AddState<SimpleStatement>()
+            .StartIn<SimpleStatement>()
             .Build();
-
-        machine.SetCurrentState<SimpleStatement>();
 
         var current = machine.GetCurrentState<SimpleStatement>();
         Assert.That(current.OnEntryCalled, Is.True);
@@ -64,9 +65,9 @@ public class StateMachineTests
         var machine = StateMachineBuilder.New()
             .AddState<SimpleStatement>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleStatement>()
             .Build();
 
-        machine.SetCurrentState<SimpleStatement>();
         var simple = machine.GetCurrentState<SimpleStatement>();
 
         machine.SetCurrentState<AdvancedUnitTestState>();
@@ -82,9 +83,9 @@ public class StateMachineTests
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>(s => s.OnExit((_, m) => currentDuringExit = m.GetCurrentState()))
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
         Assert.That(currentDuringExit, Is.TypeOf<SimpleUnitTestState>());
@@ -95,8 +96,10 @@ public class StateMachineTests
     {
         object? currentDuringEntry = null;
         var machine = StateMachineBuilder.New()
+            .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>(s => s.OnEntry((_, m) => currentDuringEntry = m.GetCurrentState()))
             .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
             .Build();
 
         machine.SetCurrentState<SimpleUnitTestState>();
@@ -113,19 +116,13 @@ public class StateMachineTests
                 .OnExit(() => onExitCalled = true)
                 .CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
         Assert.That(onExitCalled, Is.False);
-    }
-
-    [Test]
-    public void GetCurrentState_BeforeAnyTransition_ReturnsNull()
-    {
-        Assert.That(_machine.GetCurrentState(), Is.Null);
     }
 
     [Test]
@@ -144,12 +141,6 @@ public class StateMachineTests
         _machine.SetCurrentState<SimpleUnitTestState>();
 
         Assert.Throws<InvalidOperationException>(() => _machine.GetCurrentState<AdvancedUnitTestState>());
-    }
-
-    [Test]
-    public void GetCurrentStateGeneric_WhenNoCurrentState_Throws()
-    {
-        Assert.Throws<InvalidOperationException>(() => _machine.GetCurrentState<IUnitTestState>());
     }
 
     [Test]
@@ -175,23 +166,14 @@ public class StateMachineTests
     }
 
     [Test]
-    public void TryGetCurrentState_WhenNoCurrentState_ReturnsFalseAndNull()
-    {
-        var success = _machine.TryGetCurrentState<IUnitTestState>(out var state);
-
-        Assert.That(success, Is.False);
-        Assert.That(state, Is.Null);
-    }
-
-    [Test]
     public void CannotTransitionTo_BlocksTransition()
     {
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
@@ -203,9 +185,8 @@ public class StateMachineTests
         SimpleUnitTestState? captured = null;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>(s => s.OnEntry((state, _) => captured = state))
+            .StartIn<SimpleUnitTestState>()
             .Build();
-
-        machine.SetCurrentState<SimpleUnitTestState>();
 
         Assert.That(captured, Is.Not.Null);
         Assert.That(captured, Is.SameAs(machine.GetCurrentState()));
@@ -218,9 +199,9 @@ public class StateMachineTests
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>(s => s.OnExit((_, _) => exited = true))
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
         Assert.That(exited, Is.True);
@@ -233,8 +214,10 @@ public class StateMachineTests
 
         var machine = StateMachineBuilder.New()
             .AddOnStateChangedCallback(_ => onEntryCalled = true)
+            .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
             .Build();
 
         machine.SetCurrentState<SimpleUnitTestState>();
@@ -249,10 +232,13 @@ public class StateMachineTests
 
         var machine = StateMachineBuilder.New()
             .AddOnStateChangedCallback(_ => callCount++)
+            .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
             .Build();
 
+        callCount = 0;
         machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
@@ -267,8 +253,10 @@ public class StateMachineTests
 
         var machine = StateMachineBuilder.New()
             .AddOnStateChangedCallback(_ => globalTransitionTimeStamp = DateTime.Now)
+            .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>(state => state.OnEntry(() => stateTransitionTimeStamp = DateTime.Now))
             .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
             .Build();
 
         machine.SetCurrentState<SimpleUnitTestState>();
@@ -279,13 +267,18 @@ public class StateMachineTests
     [Test]
     public void GlobalTransitionMethod_TransitionInfo_ContainsCorrectState()
     {
+        TransitionInformation? captured = null;
         var machine = StateMachineBuilder.New()
-            .AddOnStateChangedCallback(info => Assert.That(info.To, Is.TypeOf<SimpleUnitTestState>()))
+            .AddOnStateChangedCallback(info => captured = info)
+            .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>()
             .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
             .Build();
 
         machine.SetCurrentState<SimpleUnitTestState>();
+
+        Assert.That(captured!.Value.To, Is.TypeOf<SimpleUnitTestState>());
     }
 
     private class UnregisteredState

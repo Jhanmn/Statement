@@ -147,6 +147,10 @@ public sealed class StateMachineBuilder<TBase> where TBase : class
         {
             _machine.SetCurrentStateByType(_initialState);
         }
+        else
+        {
+            throw new MachineSetupException("Missing initial state. Use StartIn<TState>() to set the initial state.");
+        }
 
         return _machine;
     }

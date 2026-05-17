@@ -12,9 +12,8 @@ public class StatementStateMachineTests
     {
         var machine = StateMachineBuilder.New()
             .AddState<SimpleStatement>()
+            .StartIn<SimpleStatement>()
             .Build();
-
-        machine.SetCurrentState<SimpleStatement>();
 
         var result = machine.GetCurrentState<SimpleStatement>();
         Assert.That(result.OnEntryCalled, Is.True);
@@ -26,9 +25,9 @@ public class StatementStateMachineTests
         var machine = StateMachineBuilder.New()
             .AddState<SimpleStatement>()
             .AddState<SimpleUnitTestState>()
+            .StartIn<SimpleStatement>()
             .Build();
 
-        machine.SetCurrentState<SimpleStatement>();
         var result = machine.GetCurrentState<SimpleStatement>();
         machine.SetCurrentState<SimpleUnitTestState>();
 

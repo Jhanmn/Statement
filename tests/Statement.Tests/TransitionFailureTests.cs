@@ -14,9 +14,9 @@ public class TransitionFailureTests
         var machine = StateMachineBuilder.For<IUnitTestState>()
             .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         Assert.DoesNotThrow(() => machine.SetCurrentState<AdvancedUnitTestState>());
         Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
     }
@@ -28,9 +28,8 @@ public class TransitionFailureTests
             .OnTransitionFailure(TransitionFailurePolicy.Throw)
             .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
-
-        machine.SetCurrentState<SimpleUnitTestState>();
 
         var ex = Assert.Throws<TransitionFailedException>(
             () => machine.SetCurrentState<AdvancedUnitTestState>());
@@ -47,9 +46,9 @@ public class TransitionFailureTests
             .OnTransitionFailure(TransitionFailurePolicy.Invoke(info => captured = info))
             .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
             .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .BuildTyped();
 
-        machine.SetCurrentState<SimpleUnitTestState>();
         machine.SetCurrentState<AdvancedUnitTestState>();
 
         Assert.That(captured, Is.Not.Null);
@@ -64,6 +63,7 @@ public class TransitionFailureTests
         var machine = StateMachineBuilder.New()
             .OnTransitionFailure(TransitionFailurePolicy.Silent)
             .AddState<SimpleUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
             .Build();
 
         Assert.Throws<InvalidOperationException>(
