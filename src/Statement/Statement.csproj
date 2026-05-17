@@ -4,6 +4,21 @@
         <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>latestmajor</LangVersion>
         <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageId>Jhanmn.Statement</PackageId>
+        <Title>Statement</Title>
+        <Authors>Julius Kertscher</Authors>
+        <Description>Lightweight yet powerful C# state machine library </Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/Jhanmn/Statement</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/Jhanmn/Statement</RepositoryUrl>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <Deterministic>true</Deterministic>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     </PropertyGroup>
 
 </Project>
