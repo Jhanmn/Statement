@@ -85,7 +85,7 @@ public class StateMachine : IStateMachine
             return;
         }
 
-        if (handler.Guard is { } g && !g())
+        if (handler.Guard is { } g && !g(payload))
         {
             TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.GuardFailed));
             return;

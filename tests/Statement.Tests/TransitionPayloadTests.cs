@@ -88,6 +88,64 @@ public class TransitionPayloadTests
     }
 
     [Test]
+    public void TriggerIfWithPayload_PassingPredicate_AllowsTransition()
+    {
+        FileData? captured = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.EndsWith(".txt"))
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWith<FileData>(p => captured = p))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        var payload = new FileData("ok.txt");
+        machine.Fire(new GoTrigger(), payload);
+
+        Assert.That(captured, Is.SameAs(payload));
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    [Test]
+    public void TriggerIfWithPayload_FailingPredicate_DoesNotTransition()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.EndsWith(".txt"))
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.Fire(new GoTrigger(), new FileData("nope.bin"));
+
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
+    public void TriggerIfWithPayload_WrongPayloadType_TreatedAsGuardFailure()
+    {
+        Statement.Failures.TriggerFailureInfo? captured = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .On<GoTrigger>()
+                .If<FileData>(_ => true)
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .OnTriggerFailure(Statement.Failures.TriggerFailurePolicy.Invoke(info => captured = info))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.Fire(new GoTrigger(), "not a FileData");
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Reason, Is.EqualTo(Statement.Failures.TriggerFailureReason.GuardFailed));
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
     public void TransitionInformation_CarriesPayload_ToGlobalCallback()
     {
         TransitionInformation? captured = null;

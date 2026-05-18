@@ -11,7 +11,7 @@ public sealed class TriggerBuilder<TState, TTrigger> where TState : class
 {
     private readonly StateMachine _machine;
     private readonly object _triggerKey;
-    private Func<bool>? _guard;
+    private Func<object?, bool>? _guard;
     private Action<TTrigger>? _onFire;
 
     internal TriggerBuilder(StateMachine machine, object triggerKey)
@@ -29,7 +29,23 @@ public sealed class TriggerBuilder<TState, TTrigger> where TState : class
     public TriggerBuilder<TState, TTrigger> If(Func<bool> guard)
     {
         if (guard is null) throw new ArgumentNullException(nameof(guard));
-        _guard = guard;
+        _guard = _ => guard();
+        return this;
+    }
+
+    /// <summary>
+    /// Attaches a payload-aware guard predicate. The transition only happens when the supplied payload is assignable
+    /// to <typeparamref name="TPayload"/> and the predicate returns <c>true</c>. A wrong-type or missing payload is
+    /// treated as a guard failure and routed through the configured
+    /// <see cref="Statement.Failures.TriggerFailurePolicy"/> with reason
+    /// <see cref="Statement.Failures.TriggerFailureReason.GuardFailed"/>.
+    /// </summary>
+    /// <typeparam name="TPayload">Expected payload type. Guard fails if the payload is not assignable to this type.</typeparam>
+    /// <exception cref="ArgumentNullException"><paramref name="guard"/> is <c>null</c>.</exception>
+    public TriggerBuilder<TState, TTrigger> If<TPayload>(Func<TPayload, bool> guard)
+    {
+        if (guard is null) throw new ArgumentNullException(nameof(guard));
+        _guard = payload => payload is TPayload typed && guard(typed);
         return this;
     }
 

@@ -20,6 +20,7 @@ In Statement, **each state is its own class**. Transitions are expressed by swit
 - Global transition callbacks via `AddOnStateChangedCallback` for cross-cutting concerns like logging.
 - Mandatory initial state — `StartIn<TState>()` must be configured before `Build()`, otherwise a `MachineSetupException` is thrown. This guarantees the machine is never observed in a null state.
 - Trigger-based transitions — declare `On<TTrigger>().GoTo<TTarget>()` per state and drive the machine via `machine.Fire(trigger)`. Supports marker types, enums, strings, or any value. Guards (`If`), payload-receiving side-effects (`Do`), and internal transitions (`Ignore`) are first-class.
+- Typed transition payloads — `Fire(trigger, payload)` / `SetCurrentState<T>(payload)` deliver data to the target state via `OnEntryWith<TPayload>`, and to global callbacks via `TransitionInformation.Payload`. Payload-aware guards (`If<TPayload>(p => …)`) decide per-edge whether a payload is acceptable.
 
 ## Quick start
 
@@ -174,6 +175,7 @@ The `TriggerBuilder` fragment supports:
 | `.GoTo<TTarget>()` | Transition to the target state. |
 | `.Ignore()` | Internal transition: consume the trigger without firing `OnExit` / `OnEntry`. |
 | `.If(Func<bool>)` | Guard the transition. Failed guards route through `TriggerFailurePolicy`. |
+| `.If<TPayload>(Func<TPayload, bool>)` | Payload-aware guard. Fails (as `GuardFailed`) if the payload from `Fire(trigger, payload)` isn't a `TPayload` or the predicate returns `false`. |
 | `.Do(Action<TTrigger>)` | Side-effect that runs after the guard passes, before `OnExit`. Receives the trigger value (payload). |
 
 Triggers can be any non-null object: marker-type instances (`new Open()`), enum values (`On(DoorTrigger.Open)`), strings (`On("open")`), or even a `Type`. Use whatever fits your domain.
@@ -190,6 +192,52 @@ var machine = StateMachineBuilder.New()
 
 machine.Fire(new Close());   // throws TriggerFailedException (NoHandler)
 ```
+
+### Transition payload
+
+Both `Fire(...)` and `SetCurrentState<T>()` accept an optional `object?` payload. The target state can read it through a typed `OnEntryWith<TPayload>` callback. The payload also lands on `TransitionInformation.Payload` for global observers.
+
+```csharp
+public sealed record FileData(string Path);
+
+public class Idle { }
+public class Loaded
+{
+    public string? Path { get; private set; }
+    public void Load(FileData data) => Path = data.Path;
+}
+
+public sealed record Open;
+
+var machine = StateMachineBuilder.New()
+    .AddState<Idle>(s => s.On<Open>().GoTo<Loaded>())
+    .AddState<Loaded>(s => s.OnEntryWith<FileData>((state, data) => state.Load(data)))
+    .StartIn<Idle>()
+    .Build();
+
+machine.Fire(new Open(), new FileData("readme.md"));     // Loaded.Path == "readme.md"
+machine.SetCurrentState<Loaded>(new FileData("a.txt"));  // works the same way
+```
+
+`OnEntryWith<TPayload>` only fires when the supplied payload is assignable to `TPayload`. If the payload is missing or the wrong type, the callback is **silently skipped** — the transition itself still proceeds. Use the parameterless `OnEntry(...)` for behavior that must always run on entry regardless of payload, and `OnEntryWith<TPayload>(...)` for payload-dependent work.
+
+Two flavors of `OnEntryWith`:
+
+```csharp
+.OnEntryWith<FileData>((state, data) => state.Load(data))   // state instance + payload
+.OnEntryWith<FileData>(data => Console.WriteLine(data.Path)) // payload only
+```
+
+To **reject** a transition when the payload doesn't fit, use `If<TPayload>` on the trigger — it routes wrong-type or failing-predicate payloads through `TriggerFailurePolicy` as `GuardFailed`:
+
+```csharp
+.AddState<Idle>(s => s
+    .On<Open>()
+    .If<FileData>(p => p.Path.EndsWith(".txt"))   // only proceed for .txt files
+    .GoTo<Loaded>())
+```
+
+`Do(Action<TTrigger>)` and `OnEntryWith<TPayload>` are complementary, not redundant: `Do` reads the **trigger** value (and runs before `OnExit`), `OnEntryWith` reads the **payload** (and runs after the commit, as part of entry).
 
 ### Initial state is required
 
