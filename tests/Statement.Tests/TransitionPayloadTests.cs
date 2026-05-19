@@ -73,6 +73,213 @@ public class TransitionPayloadTests
     }
 
     [Test]
+    public void OnExitWith_ReceivesPayload_FromSetCurrentState()
+    {
+        FileData? captured = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.OnExitWith<FileData>((_, p) => captured = p))
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        var payload = new FileData("foo.txt");
+        machine.SetCurrentState<AdvancedUnitTestState>(payload);
+
+        Assert.That(captured, Is.SameAs(payload));
+    }
+
+    [Test]
+    public void OnExitWith_ReceivesPayload_FromFire()
+    {
+        FileData? captured = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>(p => captured = p)
+                .On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        var payload = new FileData("bar.txt");
+        machine.Fire(new GoTrigger(), payload);
+
+        Assert.That(captured, Is.SameAs(payload));
+    }
+
+    [Test]
+    public void OnExitWith_WrongPayloadType_SkipsCallback_StillTransitions()
+    {
+        var invoked = false;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.OnExitWith<FileData>((_, _) => invoked = true))
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        Assert.DoesNotThrow(() => machine.SetCurrentState<AdvancedUnitTestState>("not a FileData"));
+        Assert.That(invoked, Is.False);
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    [Test]
+    public void OnExitWith_NullPayload_SkipsCallback_StillTransitions()
+    {
+        var invoked = false;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.OnExitWith<FileData>((_, _) => invoked = true))
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        Assert.DoesNotThrow(() => machine.SetCurrentState<AdvancedUnitTestState>());
+        Assert.That(invoked, Is.False);
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    [Test]
+    public void OnExitWith_FiresOnlyWhenIfGuardPasses()
+    {
+        FileData? exited = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>(p => exited = p)
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.EndsWith(".txt"))
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.Fire(new GoTrigger(), new FileData("nope.bin"));
+        Assert.That(exited, Is.Null);
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+
+        var ok = new FileData("ok.txt");
+        machine.Fire(new GoTrigger(), ok);
+        Assert.That(exited, Is.SameAs(ok));
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    [Test]
+    public void OnExitWith_NotInvoked_WhenIfGuardFails()
+    {
+        var invoked = false;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>((_, _) => invoked = true)
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.EndsWith(".txt"))
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.Fire(new GoTrigger(), new FileData("skip.bin"));
+
+        Assert.That(invoked, Is.False);
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
+    public void OnExitWith_Invoked_WhenIfGuardPasses()
+    {
+        FileData? exited = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>((_, p) => exited = p)
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.EndsWith(".txt"))
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        var payload = new FileData("ok.txt");
+        machine.Fire(new GoTrigger(), payload);
+
+        Assert.That(exited, Is.SameAs(payload));
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    [Test]
+    public void OnExitWith_NotInvoked_WhenIfGuardSeesWrongPayloadType()
+    {
+        var invoked = false;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>((_, _) => invoked = true)
+                .On<GoTrigger>()
+                .If<FileData>(_ => true)
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.Fire(new GoTrigger(), "not a FileData");
+
+        Assert.That(invoked, Is.False);
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
+    public void OnExitWith_AndOnEntryWith_BothReceivePayload_WhenIfGuardPasses()
+    {
+        FileData? exited = null;
+        FileData? entered = null;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>(p => exited = p)
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.Length > 0)
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWith<FileData>(p => entered = p))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        var payload = new FileData("file.txt");
+        machine.Fire(new GoTrigger(), payload);
+
+        Assert.That(exited, Is.SameAs(payload));
+        Assert.That(entered, Is.SameAs(payload));
+    }
+
+    [Test]
+    public void OnExitWith_RunsAfterGuardPasses_OnSecondAttempt()
+    {
+        var exitCount = 0;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitWith<FileData>((_, _) => exitCount++)
+                .On<GoTrigger>()
+                .If<FileData>(p => p.Path.EndsWith(".txt"))
+                .GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.Fire(new GoTrigger(), new FileData("first.bin"));
+        Assert.That(exitCount, Is.Zero);
+
+        machine.Fire(new GoTrigger(), new FileData("second.txt"));
+        Assert.That(exitCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void OnExitWith_RunsBeforeOnEntryWith()
+    {
+        var order = new List<string>();
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.OnExitWith<FileData>(p => order.Add($"exit:{p.Path}")))
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWith<FileData>(p => order.Add($"entry:{p.Path}")))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        machine.SetCurrentState<AdvancedUnitTestState>(new FileData("x.txt"));
+
+        Assert.That(order, Is.EqualTo(new[] { "exit:x.txt", "entry:x.txt" }));
+    }
+
+    [Test]
     public void OnEntry_WithoutPayloadCallback_IgnoresPayload()
     {
         var entered = false;

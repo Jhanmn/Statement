@@ -44,7 +44,7 @@ public class TransitionExecutorTests
     public void Execute_CallsOrder_ExitThenCommitThenEntry()
     {
         var order = new List<string>();
-        var from = new StateNode(typeof(SimpleStatement)) { OnExit = _ => order.Add("from.OnExit") };
+        var from = new StateNode(typeof(SimpleStatement)) { OnExit = (_, _) => order.Add("from.OnExit") };
         var to = new StateNode(typeof(SimpleStatement)) { OnEntry = (_, _) => order.Add("to.OnEntry") };
 
         _executor.Execute(new Transition(from, to), _machine, () => order.Add("commit"));

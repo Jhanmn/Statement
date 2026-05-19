@@ -10,7 +10,7 @@ internal class TransitionExecutor
         if (transition.From is not null)
         {
             (transition.FromInstance as IStatement)?.OnExit();
-            transition.From.OnExit?.Invoke(machine);
+            transition.From.OnExit?.Invoke(machine, transition.Payload);
         }
 
         commit();

@@ -85,7 +85,7 @@ public sealed class StateBuilder<TState> where TState : class
     public StateBuilder<TState> OnExit(Action<TState, IStateMachine> callback)
     {
         if (callback is null) throw new ArgumentNullException(nameof(callback));
-        _machine.AddOnExit(typeof(TState), m => callback((TState)m.GetCurrentState()!, m));
+        _machine.AddOnExit(typeof(TState), (m, _) => callback((TState)m.GetCurrentState()!, m));
         return this;
     }
 
@@ -96,7 +96,45 @@ public sealed class StateBuilder<TState> where TState : class
     public StateBuilder<TState> OnExit(Action callback)
     {
         if (callback is null) throw new ArgumentNullException(nameof(callback));
-        _machine.AddOnExit(typeof(TState), _ => callback());
+        _machine.AddOnExit(typeof(TState), (_, _) => callback());
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a callback to run when the machine transitions out of <typeparamref name="TState"/> with a typed payload.
+    /// The callback receives the state instance and the payload passed to
+    /// <see cref="StateMachine.Fire(object, object?)"/> or <see cref="StateMachine.SetCurrentState{T}(object?)"/>.
+    /// </summary>
+    /// <typeparam name="TPayload">Expected payload type. If the supplied payload is not assignable to <typeparamref name="TPayload"/> the callback is silently skipped; the transition itself still proceeds.</typeparam>
+    /// <exception cref="ArgumentNullException"><paramref name="callback"/> is <c>null</c>.</exception>
+    public StateBuilder<TState> OnExitWith<TPayload>(Action<TState, TPayload> callback)
+    {
+        if (callback is null) throw new ArgumentNullException(nameof(callback));
+        _machine.AddOnExit(typeof(TState), (m, payload) =>
+        {
+            if (payload is TPayload typed)
+            {
+                callback((TState)m.GetCurrentState()!, typed);
+            }
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a payload-only callback to run when the machine transitions out of <typeparamref name="TState"/>.
+    /// </summary>
+    /// <typeparam name="TPayload">Expected payload type. If the supplied payload is not assignable to <typeparamref name="TPayload"/> the callback is silently skipped; the transition itself still proceeds.</typeparam>
+    /// <exception cref="ArgumentNullException"><paramref name="callback"/> is <c>null</c>.</exception>
+    public StateBuilder<TState> OnExitWith<TPayload>(Action<TPayload> callback)
+    {
+        if (callback is null) throw new ArgumentNullException(nameof(callback));
+        _machine.AddOnExit(typeof(TState), (_, payload) =>
+        {
+            if (payload is TPayload typed)
+            {
+                callback(typed);
+            }
+        });
         return this;
     }
 

@@ -204,7 +204,7 @@ public class StateMachine : IStateMachine
         }
     }
 
-    internal void AddOnExit(Type stateType, Action<StateMachine> callback)
+    internal void AddOnExit(Type stateType, Action<StateMachine, object?> callback)
     {
         if (_nodes.TryGetValue(stateType, out var node))
         {

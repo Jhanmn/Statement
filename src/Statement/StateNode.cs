@@ -11,7 +11,7 @@ internal sealed class StateNode(Type type, object? preBuiltInstance = null)
 
     internal Type Type { get; } = type;
     internal Action<StateMachine, object?>? OnEntry { get; set; }
-    internal Action<StateMachine>? OnExit { get; set; }
+    internal Action<StateMachine, object?>? OnExit { get; set; }
     internal TransitionRule? TransitionRule { get; set; }
     internal Dictionary<object, TriggerHandler> Triggers { get; } = new();
 

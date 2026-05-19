@@ -20,7 +20,7 @@ In Statement, **each state is its own class**. Transitions are expressed by swit
 - Global transition callbacks via `AddOnStateChangedCallback` for cross-cutting concerns like logging.
 - Mandatory initial state — `StartIn<TState>()` must be configured before `Build()`, otherwise a `MachineSetupException` is thrown. This guarantees the machine is never observed in a null state.
 - Trigger-based transitions — declare `On<TTrigger>().GoTo<TTarget>()` per state and drive the machine via `machine.Fire(trigger)`. Supports marker types, enums, strings, or any value. Guards (`If`), payload-receiving side-effects (`Do`), and internal transitions (`Ignore`) are first-class.
-- Typed transition payloads — `Fire(trigger, payload)` / `SetCurrentState<T>(payload)` deliver data to the target state via `OnEntryWith<TPayload>`, and to global callbacks via `TransitionInformation.Payload`. Payload-aware guards (`If<TPayload>(p => …)`) decide per-edge whether a payload is acceptable.
+- Typed transition payloads — `Fire(trigger, payload)` / `SetCurrentState<T>(payload)` deliver data to entry and exit callbacks via `OnEntryWith<TPayload>` / `OnExitWith<TPayload>`, and to global callbacks via `TransitionInformation.Payload`. Payload-aware guards (`If<TPayload>(p => …)`) decide per-edge whether a payload is acceptable.
 
 ## Quick start
 
@@ -219,16 +219,28 @@ machine.Fire(new Open(), new FileData("readme.md"));     // Loaded.Path == "read
 machine.SetCurrentState<Loaded>(new FileData("a.txt"));  // works the same way
 ```
 
-`OnEntryWith<TPayload>` only fires when the supplied payload is assignable to `TPayload`. If the payload is missing or the wrong type, the callback is **silently skipped** — the transition itself still proceeds. Use the parameterless `OnEntry(...)` for behavior that must always run on entry regardless of payload, and `OnEntryWith<TPayload>(...)` for payload-dependent work.
+`OnEntryWith<TPayload>` and `OnExitWith<TPayload>` only fire when the supplied payload is assignable to `TPayload`. If the payload is missing or the wrong type, the callback is **silently skipped** — the transition itself still proceeds. Use the parameterless `OnEntry(...)` / `OnExit(...)` for behavior that must always run regardless of payload.
 
-Two flavors of `OnEntryWith`:
+Both callbacks come in two flavors:
 
 ```csharp
-.OnEntryWith<FileData>((state, data) => state.Load(data))   // state instance + payload
+// OnEntryWith
+.OnEntryWith<FileData>((state, data) => state.Load(data))    // state instance + payload
 .OnEntryWith<FileData>(data => Console.WriteLine(data.Path)) // payload only
+
+// OnExitWith
+.OnExitWith<FileData>((state, data) => state.Cleanup(data))  // state instance + payload
+.OnExitWith<FileData>(data => Console.WriteLine(data.Path))  // payload only
 ```
 
-To **reject** a transition when the payload doesn't fit, use `If<TPayload>` on the trigger — it routes wrong-type or failing-predicate payloads through `TriggerFailurePolicy` as `GuardFailed`:
+The full execution order for a transition is:
+
+1. `OnExitWith<TPayload>` / `OnExit` on the leaving state
+2. State commit (current state pointer is updated)
+3. Global `AddOnStateChangedCallback` observers
+4. `OnEntryWith<TPayload>` / `OnEntry` on the entering state
+
+To **reject** a transition when the payload doesn't fit, use `If<TPayload>` on the trigger — it routes wrong-type or failing-predicate payloads through `TriggerFailurePolicy` as `GuardFailed`. When the guard fails, neither `OnExitWith` nor `OnEntryWith` fires:
 
 ```csharp
 .AddState<Idle>(s => s
@@ -237,7 +249,7 @@ To **reject** a transition when the payload doesn't fit, use `If<TPayload>` on t
     .GoTo<Loaded>())
 ```
 
-`Do(Action<TTrigger>)` and `OnEntryWith<TPayload>` are complementary, not redundant: `Do` reads the **trigger** value (and runs before `OnExit`), `OnEntryWith` reads the **payload** (and runs after the commit, as part of entry).
+`Do(Action<TTrigger>)` and `OnEntryWith<TPayload>` / `OnExitWith<TPayload>` are complementary, not redundant: `Do` reads the **trigger** value (and runs before `OnExit`), while the `With` callbacks read the **payload** as part of entry/exit.
 
 ### Initial state is required
 
