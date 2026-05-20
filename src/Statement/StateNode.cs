@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Statement.Rules;
 using Statement.Triggers;
@@ -11,8 +12,8 @@ internal sealed class StateNode(Type type, object? preBuiltInstance = null)
     private object? _instance = preBuiltInstance;
 
     internal Type Type { get; } = type;
-    internal Func<StateMachine, object?, Task>? OnEntry { get; set; }
-    internal Func<StateMachine, object?, Task>? OnExit { get; set; }
+    internal Func<StateMachine, object?, CancellationToken, Task>? OnEntry { get; set; }
+    internal Func<StateMachine, object?, CancellationToken, Task>? OnExit { get; set; }
     internal TransitionRule? TransitionRule { get; set; }
     internal Dictionary<object, TriggerHandler> Triggers { get; } = new();
 

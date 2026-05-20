@@ -8,6 +8,8 @@ internal class TransitionExecutor
 {
     internal async Task ExecuteAsync(Transition transition, StateMachine machine, Action commit)
     {
+        transition.Token.ThrowIfCancellationRequested();
+        
         if (transition.From is not null)
         {
             //on interface callbacks
@@ -17,14 +19,14 @@ internal class TransitionExecutor
                     statement.OnExit();
                     break;
                 case IAsyncStatement asyncFrom:
-                    await asyncFrom.OnExitAsync();
+                    await asyncFrom.OnExitAsync(transition.Token);
                     break;
             }
 
             //provided callbacks through api
             if (transition.From.OnExit is not null)
             {
-                await transition.From.OnExit(machine, transition.Payload);
+                await transition.From.OnExit(machine, transition.Payload, transition.Token);
             }
         }
 
@@ -35,7 +37,8 @@ internal class TransitionExecutor
             transition.From?.Type,
             transition.To.Type,
             transition.Trigger,
-            transition.Payload));
+            transition.Payload),
+            transition.Token);
 
         switch (transition.ToInstance)
         {
@@ -43,13 +46,13 @@ internal class TransitionExecutor
                 toStatement.OnEntry();
                 break;
             case IAsyncStatement asyncToStatement:
-                await asyncToStatement.OnEntryAsync();
+                await asyncToStatement.OnEntryAsync(transition.Token);
                 break;
         }
 
         if (transition.To.OnEntry is not null)
         {
-            await transition.To.OnEntry(machine, transition.Payload);
+            await transition.To.OnEntry(machine, transition.Payload, transition.Token);
         }
     }
 }

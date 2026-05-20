@@ -367,7 +367,7 @@ public class AsyncStateMachineTests
         string? captured = null;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
-            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async p =>
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async (p, _) =>
             {
                 await Task.Delay(50);
                 captured = p;
@@ -385,7 +385,7 @@ public class AsyncStateMachineTests
     {
         string? captured = null;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async p =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (p, _) =>
             {
                 await Task.Delay(50);
                 captured = p;
@@ -405,7 +405,7 @@ public class AsyncStateMachineTests
         var invoked = false;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
-            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async _ =>
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async ( string _, CancellationToken _) =>
             {
                 await Task.Yield();
                 invoked = true;
@@ -424,7 +424,7 @@ public class AsyncStateMachineTests
     {
         var invoked = false;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async _ =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (_, _) =>
             {
                 await Task.Yield();
                 invoked = true;
@@ -482,7 +482,7 @@ public class AsyncStateMachineTests
     {
         object? currentDuringExit = null;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitAsync(async (_, m) =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitAsync(async (_, m, _) =>
             {
                 await Task.Yield();
                 currentDuringExit = m.GetCurrentState();
@@ -502,7 +502,7 @@ public class AsyncStateMachineTests
         object? currentDuringEntry = null;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
-            .AddState<AdvancedUnitTestState>(s => s.OnEntryAsync(async (_, m) =>
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryAsync(async (_, m, _) =>
             {
                 await Task.Yield();
                 currentDuringEntry = m.GetCurrentState();
@@ -544,7 +544,7 @@ public class AsyncStateMachineTests
         string? capturedPayload = null;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>(s => s
-                .OnExitWithAsync<string>(async (state, p) =>
+                .OnExitWithAsync<string>(async(state ,p , _) =>
                 {
                     await Task.Yield();
                     capturedState = state;
@@ -604,4 +604,246 @@ public class AsyncStateMachineTests
 
         Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
     }
+
+    #region Cancellation
+
+    [Test]
+    public void FireAsync_PreCancelledToken_ThrowsOperationCanceledException()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.ThrowsAsync<OperationCanceledException>(
+            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+    }
+
+    [Test]
+    public async Task FireAsync_PreCancelledToken_StateUnchanged()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        try
+        {
+            await machine.FireAsync(new GoTrigger(), null, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
+    public void FireAsync_PreCancelledToken_OnExitNotInvoked()
+    {
+        var exitCalled = false;
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitAsync(async () =>
+                {
+                    await Task.Yield();
+                    exitCalled = true;
+                })
+                .On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.ThrowsAsync<OperationCanceledException>(
+            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+        Assert.That(exitCalled, Is.False);
+    }
+
+    [Test]
+    public async Task FireAsync_TokenPassedThroughToOnEntryAsync()
+    {
+        CancellationToken receivedToken = default;
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryAsync(async (_, _, ct) =>
+            {
+                receivedToken = ct;
+                await Task.Yield();
+            }))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        await machine.FireAsync(new GoTrigger(), null, cts.Token);
+
+        Assert.That(receivedToken, Is.EqualTo(cts.Token));
+    }
+
+    [Test]
+    public async Task FireAsync_TokenPassedThroughToOnExitAsync()
+    {
+        CancellationToken receivedToken = default;
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitAsync(async (_, _, ct) =>
+                {
+                    receivedToken = ct;
+                    await Task.Yield();
+                })
+                .On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        await machine.FireAsync(new GoTrigger(), null, cts.Token);
+
+        Assert.That(receivedToken, Is.EqualTo(cts.Token));
+    }
+
+    [Test]
+    public async Task FireAsync_TokenPassedThroughToOnEntryWithAsync()
+    {
+        CancellationToken receivedToken = default;
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async (string _, CancellationToken ct) =>
+            {
+                receivedToken = ct;
+                await Task.Yield();
+            }))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        await machine.FireAsync(new GoTrigger(), "payload", cts.Token);
+
+        Assert.That(receivedToken, Is.EqualTo(cts.Token));
+    }
+
+    [Test]
+    public void FireAsync_CancelledDuringOnExitAsync_PropagatesException()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitAsync(async (_, _, ct) =>
+                {
+                    cts.Cancel();
+                    await Task.Delay(1000, ct);
+                })
+                .On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        Assert.CatchAsync<OperationCanceledException>(
+            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+    }
+
+    [Test]
+    public async Task FireAsync_CancelledDuringOnExitAsync_StateNotCommitted()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s
+                .OnExitAsync(async (_, _, ct) =>
+                {
+                    cts.Cancel();
+                    await Task.Delay(1000, ct);
+                })
+                .On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        try
+        {
+            await machine.FireAsync(new GoTrigger(), null, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<SimpleUnitTestState>());
+    }
+
+    [Test]
+    public void FireAsync_CancelledDuringOnEntryAsync_PropagatesException()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryAsync(async (_, _, ct) =>
+            {
+                cts.Cancel();
+                await Task.Delay(1000, ct);
+            }))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        Assert.CatchAsync<OperationCanceledException>(
+            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+    }
+
+    [Test]
+    public async Task FireAsync_CancelledDuringOnEntryAsync_StateAlreadyCommitted()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryAsync(async (_, _, ct) =>
+            {
+                cts.Cancel();
+                await Task.Delay(1000, ct);
+            }))
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        try
+        {
+            await machine.FireAsync(new GoTrigger(), null, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    [Test]
+    public async Task FireAsync_NonCancelledToken_TransitionsNormally()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.On<GoTrigger>().GoTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        await machine.FireAsync(new GoTrigger(), null, cts.Token);
+
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
+    }
+
+    #endregion
 }

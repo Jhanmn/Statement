@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Statement.State;
@@ -41,11 +42,11 @@ public interface IAsyncStatement
     /// Asynchronously invoked when the machine transitions into this state, after global transition callbacks fire.
     /// </summary>
     /// <returns>A task representing the asynchronous entry operation.</returns>
-    Task OnEntryAsync();
+    Task OnEntryAsync(CancellationToken cts = default);
 
     /// <summary>
     /// Asynchronously invoked when the machine transitions out of this state, before the target state's OnEntry.
     /// </summary>
     /// <returns>A task representing the asynchronous exit operation.</returns>
-    Task OnExitAsync();
+    Task OnExitAsync(CancellationToken cts = default);
 }

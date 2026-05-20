@@ -34,7 +34,7 @@ public class TransitionExecutorTests
     {
         var to = new StateNode(typeof(SimpleStatement));
         var entryCalled = false;
-        to.OnEntry = (_, _) => { entryCalled = true; return Task.CompletedTask; };
+        to.OnEntry = (_, _, _) => { entryCalled = true; return Task.CompletedTask; };
 
         Assert.DoesNotThrowAsync(() => _executor.ExecuteAsync(new Transition(null, to), _machine, () => { }));
         Assert.That(entryCalled, Is.True);
@@ -45,8 +45,8 @@ public class TransitionExecutorTests
     public async Task Execute_CallsOrder_ExitThenCommitThenEntry()
     {
         var order = new List<string>();
-        var from = new StateNode(typeof(SimpleStatement)) { OnExit = (_, _) => { order.Add("from.OnExit"); return Task.CompletedTask; } };
-        var to = new StateNode(typeof(SimpleStatement)) { OnEntry = (_, _) => { order.Add("to.OnEntry"); return Task.CompletedTask; } };
+        var from = new StateNode(typeof(SimpleStatement)) { OnExit = (_, _, _) => { order.Add("from.OnExit"); return Task.CompletedTask; } };
+        var to = new StateNode(typeof(SimpleStatement)) { OnEntry = (_, _, _) => { order.Add("to.OnEntry"); return Task.CompletedTask; } };
 
         await _executor.ExecuteAsync(new Transition(from, to), _machine, () => order.Add("commit"));
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Statement.Failures;
 using Statement.Rules;
@@ -13,7 +15,7 @@ namespace Statement;
 /// Instances are created and configured through <see cref="Statement.Fluent.Api.StateMachineBuilder"/>.
 /// Transitions are gated by configured rules and surrounded by registered entry/exit callbacks.
 /// </summary>
-public class StateMachine : IStateMachine
+public class StateMachine
 {
     private Type? _innerParentType;
     private readonly Dictionary<Type, StateNode> _nodes = new();
@@ -46,12 +48,23 @@ public class StateMachine : IStateMachine
     /// <summary>
     /// Asynchronously transitions the machine to the registered state of type <typeparamref name="T"/>.
     /// </summary>
-    public Task SetCurrentStateAsync<T>() => SetCurrentStateByTypeAsync(typeof(T), null);
+    /// <remarks>
+    /// Cancellation semantics: the token is checked once before any callback runs and is forwarded to all
+    /// async entry/exit callbacks. Cancellation is best-effort, not transactional —
+    /// if a user callback observes the token (e.g. <c>Task.Delay(ct)</c>) and throws, the transition aborts
+    /// at that point; if cancellation falls between callbacks where the token is not observed, the
+    /// transition runs to completion. Callers should not assume machine state on cancellation —
+    /// inspect <see cref="GetCurrentState()"/>.
+    /// </remarks>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task SetCurrentStateAsync<T>(CancellationToken cancellationToken = default) => SetCurrentStateByTypeAsync(typeof(T), null, cancellationToken);
 
     /// <summary>
     /// Asynchronously transitions to <typeparamref name="T"/> with a typed <paramref name="payload"/>.
     /// </summary>
-    public Task SetCurrentStateAsync<T>(object? payload) => SetCurrentStateByTypeAsync(typeof(T), payload);
+    /// <remarks>See <see cref="SetCurrentStateAsync{T}(CancellationToken)"/> for cancellation semantics.</remarks>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task SetCurrentStateAsync<T>(object? payload, CancellationToken cancellationToken = default) => SetCurrentStateByTypeAsync(typeof(T), payload, cancellationToken);
 
     internal void SetCurrentStateByType(Type stateType, object? payload = null)
     {
@@ -68,8 +81,10 @@ public class StateMachine : IStateMachine
         }
     }
 
-    internal async Task SetCurrentStateByTypeAsync(Type stateType, object? payload = null)
+    internal async Task SetCurrentStateByTypeAsync(Type stateType, object? payload = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!_nodes.TryGetValue(stateType, out var target))
         {
             throw new InvalidOperationException($"State {stateType} is not registered.");
@@ -81,7 +96,7 @@ public class StateMachine : IStateMachine
             return;
         }
 
-        var transition = new Transition(_current, target, payload: payload);
+        var transition = new Transition(_current, target, payload: payload, cancellationToken: cancellationToken);
         await _transitionExecutor.ExecuteAsync(transition, this, () => _current = target);
     }
 
@@ -117,14 +132,27 @@ public class StateMachine : IStateMachine
     /// <summary>
     /// Asynchronously fires a trigger on the machine.
     /// </summary>
-    public Task FireAsync(object trigger) => FireAsync(trigger, null);
+    /// <remarks>See <see cref="FireAsync(object, object?, CancellationToken)"/> for cancellation semantics.</remarks>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task FireAsync(object trigger, CancellationToken cancellationToken = default) => FireAsync(trigger, null, cancellationToken);
 
     /// <summary>
     /// Asynchronously fires a trigger with a typed <paramref name="payload"/>.
     /// </summary>
-    public async Task FireAsync(object trigger, object? payload)
+    /// <remarks>
+    /// Cancellation semantics: the token is checked once before any callback runs and is forwarded to all
+    /// async entry/exit callbacks. Cancellation is best-effort, not transactional —
+    /// if a user callback observes the token (e.g. <c>Task.Delay(ct)</c>) and throws, the transition aborts
+    /// at that point; if cancellation falls between callbacks where the token is not observed, the
+    /// transition runs to completion. Callers should not assume machine state on cancellation —
+    /// inspect <see cref="GetCurrentState()"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="trigger"/> is <c>null</c>.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public async Task FireAsync(object trigger, object? payload, CancellationToken cancellationToken = default)
     {
         if (trigger is null) throw new ArgumentNullException(nameof(trigger));
+        cancellationToken.ThrowIfCancellationRequested();
         if (_current is null) throw new InvalidOperationException("Machine has no current state.");
 
         var key = TriggerKey.Of(trigger);
@@ -158,7 +186,7 @@ public class StateMachine : IStateMachine
             return;
         }
 
-        var transition = new Transition(_current, target, trigger, payload);
+        var transition = new Transition(_current, target, trigger, payload, cancellationToken);
         await _transitionExecutor.ExecuteAsync(transition, this, () => _current = target);
     }
 
@@ -209,10 +237,11 @@ public class StateMachine : IStateMachine
         }
     }
 
-    internal async Task InvokeTransitionCallbacksAsync(TransitionInformation transitionInformation)
+    internal async Task InvokeTransitionCallbacksAsync(TransitionInformation transitionInformation, CancellationToken cancellationToken = default)
     {
         foreach (var transitionCallback in _transitionCallbacks)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 await transitionCallback(transitionInformation);
@@ -244,7 +273,7 @@ public class StateMachine : IStateMachine
         _nodes.Add(typeof(TState), new StateNode(typeof(TState), instance));
     }
 
-    internal void AddOnEntry(Type stateType, Func<StateMachine, object?, Task> callback)
+    internal void AddOnEntry(Type stateType, Func<StateMachine, object?, CancellationToken, Task> callback)
     {
         if (_nodes.TryGetValue(stateType, out var node))
         {
@@ -252,7 +281,7 @@ public class StateMachine : IStateMachine
         }
     }
 
-    internal void AddOnExit(Type stateType, Func<StateMachine, object?, Task> callback)
+    internal void AddOnExit(Type stateType, Func<StateMachine, object?, CancellationToken, Task> callback)
     {
         if (_nodes.TryGetValue(stateType, out var node))
         {

@@ -34,10 +34,10 @@ public class AsyncStateBuilderTests
     public async Task OnEntryAsync_TypedOverload_ReceivesStateAndMachine()
     {
         SimpleUnitTestState? capturedState = null;
-        IStateMachine? capturedMachine = null;
+        StateMachine? capturedMachine = null;
         var machine = StateMachineBuilder.New()
             .AddState<InitialUnitTestState>()
-            .AddState<SimpleUnitTestState>(s => s.OnEntryAsync(async (state, m) =>
+            .AddState<SimpleUnitTestState>(s => s.OnEntryAsync(async (state, m, _) =>
             {
                 await Task.Yield();
                 capturedState = state;
@@ -70,7 +70,7 @@ public class AsyncStateBuilderTests
         {
             StateMachineBuilder.New()
                 .AddState<SimpleUnitTestState>(s =>
-                    s.OnEntryAsync((Func<SimpleUnitTestState, IStateMachine, Task>)null!));
+                    s.OnEntryAsync((Func<SimpleUnitTestState, StateMachine, CancellationToken,Task>)null!));
         });
     }
 
@@ -101,9 +101,9 @@ public class AsyncStateBuilderTests
     public async Task OnExitAsync_TypedOverload_ReceivesStateAndMachine()
     {
         SimpleUnitTestState? capturedState = null;
-        IStateMachine? capturedMachine = null;
+        StateMachine? capturedMachine = null;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitAsync(async (state, m) =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitAsync(async (state, m, _) =>
             {
                 await Task.Yield();
                 capturedState = state;
@@ -136,7 +136,7 @@ public class AsyncStateBuilderTests
         {
             StateMachineBuilder.New()
                 .AddState<SimpleUnitTestState>(s =>
-                    s.OnExitAsync((Func<SimpleUnitTestState, IStateMachine, Task>)null!));
+                    s.OnExitAsync((Func<SimpleUnitTestState, StateMachine, CancellationToken, Task>)null!));
         });
     }
 
@@ -152,7 +152,7 @@ public class AsyncStateBuilderTests
         string? captured = null;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
-            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async p =>
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async (p,_) =>
             {
                 await Task.Yield();
                 captured = p;
@@ -195,7 +195,7 @@ public class AsyncStateBuilderTests
         var invoked = false;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
-            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async _ =>
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async (string _, CancellationToken _) =>
             {
                 await Task.Yield();
                 invoked = true;
@@ -215,7 +215,7 @@ public class AsyncStateBuilderTests
         var invoked = false;
         var machine = StateMachineBuilder.New()
             .AddState<SimpleUnitTestState>()
-            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async _ =>
+            .AddState<AdvancedUnitTestState>(s => s.OnEntryWithAsync<string>(async (string _, CancellationToken _) =>
             {
                 await Task.Yield();
                 invoked = true;
@@ -234,7 +234,7 @@ public class AsyncStateBuilderTests
         Assert.Throws<ArgumentNullException>(() =>
         {
             StateMachineBuilder.New()
-                .AddState<SimpleUnitTestState>(s => s.OnEntryWithAsync<string>((Func<string, Task>)null!));
+                .AddState<SimpleUnitTestState>(s => s.OnEntryWithAsync<string>((Func<string, CancellationToken, Task>)null!));
         });
     }
 
@@ -258,7 +258,7 @@ public class AsyncStateBuilderTests
     {
         string? captured = null;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async p =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (p,_) =>
             {
                 await Task.Yield();
                 captured = p;
@@ -278,7 +278,7 @@ public class AsyncStateBuilderTests
         SimpleUnitTestState? capturedState = null;
         string? capturedPayload = null;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (state, p) =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (state, p,_) =>
             {
                 await Task.Yield();
                 capturedState = state;
@@ -299,7 +299,7 @@ public class AsyncStateBuilderTests
     {
         var invoked = false;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async _ =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (_,_) =>
             {
                 await Task.Yield();
                 invoked = true;
@@ -318,7 +318,7 @@ public class AsyncStateBuilderTests
     {
         var invoked = false;
         var machine = StateMachineBuilder.New()
-            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async _ =>
+            .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>(async (_,_) =>
             {
                 await Task.Yield();
                 invoked = true;
@@ -338,7 +338,7 @@ public class AsyncStateBuilderTests
         Assert.Throws<ArgumentNullException>(() =>
         {
             StateMachineBuilder.New()
-                .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>((Func<string, Task>)null!));
+                .AddState<SimpleUnitTestState>(s => s.OnExitWithAsync<string>((Func<string, CancellationToken, Task>)null!));
         });
     }
 
@@ -349,7 +349,7 @@ public class AsyncStateBuilderTests
         {
             StateMachineBuilder.New()
                 .AddState<SimpleUnitTestState>(s =>
-                    s.OnExitWithAsync<string>((Func<SimpleUnitTestState, string, Task>)null!));
+                    s.OnExitWithAsync<string>((Func<SimpleUnitTestState, string, CancellationToken, Task>)null!));
         });
     }
 
@@ -571,13 +571,13 @@ public class AsyncStateBuilderTests
         var machine = await StateMachineBuilder.New()
             .AddState<InitialUnitTestState>()
             .AddState<SimpleUnitTestState>(s => s
-                .OnExitWithAsync<string>(async p =>
+                .OnExitWithAsync<string>(async (p,_) =>
                 {
                     await Task.Yield();
                     order.Add($"exit:{p}");
                 }))
             .AddState<AdvancedUnitTestState>(s => s
-                .OnEntryWithAsync<string>(async p =>
+                .OnEntryWithAsync<string>(async (string p, CancellationToken _) =>
                 {
                     await Task.Yield();
                     order.Add($"entry:{p}");
