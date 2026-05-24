@@ -89,7 +89,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), "payload");
+        await machine.FireAsyncIntern(new GoTrigger(), "payload");
 
         Assert.That(captured, Is.EqualTo("payload"));
     }
@@ -531,7 +531,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), "test-data");
+        await machine.FireAsyncIntern(new GoTrigger(), "test-data");
 
         Assert.That(capturedState, Is.Not.Null);
         Assert.That(capturedPayload, Is.EqualTo("test-data"));
@@ -555,7 +555,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), "exit-data");
+        await machine.FireAsyncIntern(new GoTrigger(), "exit-data");
 
         Assert.That(capturedState, Is.Not.Null);
         Assert.That(capturedPayload, Is.EqualTo("exit-data"));
@@ -620,7 +620,7 @@ public class AsyncStateMachineTests
         cts.Cancel();
 
         Assert.ThrowsAsync<OperationCanceledException>(
-            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+            () => machine.FireAsyncIntern(new GoTrigger(), null, cts.Token));
     }
 
     [Test]
@@ -637,7 +637,7 @@ public class AsyncStateMachineTests
 
         try
         {
-            await machine.FireAsync(new GoTrigger(), null, cts.Token);
+            await machine.FireAsyncIntern(new GoTrigger(), null, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -666,7 +666,7 @@ public class AsyncStateMachineTests
         cts.Cancel();
 
         Assert.ThrowsAsync<OperationCanceledException>(
-            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+            () => machine.FireAsyncIntern(new GoTrigger(), null, cts.Token));
         Assert.That(exitCalled, Is.False);
     }
 
@@ -686,7 +686,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), null, cts.Token);
+        await machine.FireAsyncIntern(new GoTrigger(), null, cts.Token);
 
         Assert.That(receivedToken, Is.EqualTo(cts.Token));
     }
@@ -709,7 +709,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), null, cts.Token);
+        await machine.FireAsyncIntern(new GoTrigger(), null, cts.Token);
 
         Assert.That(receivedToken, Is.EqualTo(cts.Token));
     }
@@ -730,7 +730,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), "payload", cts.Token);
+        await machine.FireAsyncIntern(new GoTrigger(), "payload", cts.Token);
 
         Assert.That(receivedToken, Is.EqualTo(cts.Token));
     }
@@ -753,7 +753,7 @@ public class AsyncStateMachineTests
             .Build();
 
         Assert.CatchAsync<OperationCanceledException>(
-            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+            () => machine.FireAsyncIntern(new GoTrigger(), null, cts.Token));
     }
 
     [Test]
@@ -775,7 +775,7 @@ public class AsyncStateMachineTests
 
         try
         {
-            await machine.FireAsync(new GoTrigger(), null, cts.Token);
+            await machine.FireAsyncIntern(new GoTrigger(), null, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -800,7 +800,7 @@ public class AsyncStateMachineTests
             .Build();
 
         Assert.CatchAsync<OperationCanceledException>(
-            () => machine.FireAsync(new GoTrigger(), null, cts.Token));
+            () => machine.FireAsyncIntern(new GoTrigger(), null, cts.Token));
     }
 
     [Test]
@@ -820,7 +820,7 @@ public class AsyncStateMachineTests
 
         try
         {
-            await machine.FireAsync(new GoTrigger(), null, cts.Token);
+            await machine.FireAsyncIntern(new GoTrigger(), null, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -840,7 +840,7 @@ public class AsyncStateMachineTests
             .StartIn<SimpleUnitTestState>()
             .Build();
 
-        await machine.FireAsync(new GoTrigger(), null, cts.Token);
+        await machine.FireAsyncIntern(new GoTrigger(), null, cts.Token);
 
         Assert.That(machine.GetCurrentState(), Is.TypeOf<AdvancedUnitTestState>());
     }

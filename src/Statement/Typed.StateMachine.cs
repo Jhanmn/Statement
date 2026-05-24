@@ -29,21 +29,23 @@ public class StateMachine<T> : StateMachine where T : class
     /// The transition is silently ignored if the target state is not registered or is blocked by a transition rule.
     /// </summary>
     /// <typeparam name="TState">The state type to switch to. Must derive from or implement <typeparamref name="T"/>.</typeparam>
-    public new void SetCurrentState<TState>() where TState : T => SetCurrentStateByType(typeof(TState));
+    public new void SetCurrentState<TState>() where TState : T
+        => base.SetCurrentState<TState>();
 
     /// <summary>
     /// Transitions to <typeparamref name="TState"/> and carries a typed <paramref name="payload"/> through to
     /// the target state's <c>OnEntryWith</c> callback.
     /// </summary>
-    public new void SetCurrentState<TState>(object? payload) where TState : T => SetCurrentStateByType(typeof(TState), payload);
+    public new void SetCurrentState<TState>(object? payload) where TState : T 
+        => base.SetCurrentState<TState>( payload);
 
     /// <summary>
     /// Asynchronously transitions to <typeparamref name="TState"/>.
     /// </summary>
-    public new Task SetCurrentStateAsync<TState>() where TState : T => SetCurrentStateByTypeAsync(typeof(TState));
+    public Task SetCurrentStateAsync<TState>() where TState : T => base.SetCurrentStateAsync<TState>();
 
     /// <summary>
     /// Asynchronously transitions to <typeparamref name="TState"/> with a typed <paramref name="payload"/>.
     /// </summary>
-    public new Task SetCurrentStateAsync<TState>(object? payload) where TState : T => SetCurrentStateByTypeAsync(typeof(TState), payload);
+    public Task SetCurrentStateAsync<TState>(object? payload) where TState : T => base.SetCurrentStateAsync<TState>(payload);
 }

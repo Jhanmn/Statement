@@ -7,19 +7,32 @@ namespace Statement.Failures;
 /// </summary>
 public sealed class TriggerFailureInfo
 {
-    /// <summary>The state the machine was in when the trigger was fired.</summary>
-    public Type CurrentState { get; }
+    /// <summary>
+    /// The state the machine was in when the trigger was fired.
+    /// </summary>
+    public Type? CurrentState { get; }
 
-    /// <summary>The trigger value that was fired.</summary>
+    /// <summary>
+    /// The trigger value that was fired.
+    /// </summary>
     public object Trigger { get; }
 
-    /// <summary>Why the trigger did not produce a transition.</summary>
+    /// <summary>
+    /// Why the trigger did not produce a transition.
+    /// </summary>
     public TriggerFailureReason Reason { get; }
 
-    internal TriggerFailureInfo(Type currentState, object trigger, TriggerFailureReason reason)
+    /// <summary>
+    /// can carry the exception which was thrown during the error.
+    /// </summary>
+    public Exception? Exception { get; }
+
+    internal TriggerFailureInfo(Type? currentState, object trigger, TriggerFailureReason reason, Exception? exception = null)
     {
         CurrentState = currentState;
         Trigger = trigger;
         Reason = reason;
+        Exception = exception;
     }
+
 }

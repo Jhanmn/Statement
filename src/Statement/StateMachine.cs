@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Statement.Failures;
 using Statement.Rules;
 using Statement.Triggers;
+using Statement.Utils;
 
 namespace Statement;
 
@@ -23,6 +24,9 @@ public class StateMachine
     private readonly RuleMaster _ruleMaster = new();
     private readonly TransitionExecutor _transitionExecutor = new();
     private readonly List<Func<TransitionInformation, Task>> _transitionCallbacks = [];
+    private readonly SemaphoreSlim _semaphore = new(initialCount: 1,maxCount: 1);
+    private readonly AsyncLocal<bool> _inTransition = new();
+    private readonly Queue<(object trigger, object? payload)> _triggerQueue = [];
 
     internal StateMachine() { }
     internal TransitionFailurePolicy FailurePolicy { get; set; } = TransitionFailurePolicy.Silent;
@@ -36,14 +40,22 @@ public class StateMachine
     /// Exit callbacks of the previous state and entry callbacks of the new state run as part of the transition.
     /// </summary>
     /// <typeparam name="T">The state type to switch to. Must have been registered on this machine.</typeparam>
-    public void SetCurrentState<T>() => SetCurrentStateByType(typeof(T), null);
+    public void SetCurrentState<T>()
+    {
+        _inTransition.ThrowIfActive();
+        _semaphore.RunAction(() => SetCurrentStateByType(typeof(T), null));
+    }
 
     /// <summary>
     /// Transitions to <typeparamref name="T"/> and carries a typed <paramref name="payload"/> through to
     /// the target state's <see cref="Statement.Fluent.Api.StateBuilder{TState}.OnEntryWith{TPayload}"/> callback
     /// and to any global transition callbacks via <see cref="TransitionInformation.Payload"/>.
     /// </summary>
-    public void SetCurrentState<T>(object? payload) => SetCurrentStateByType(typeof(T), payload);
+    public void SetCurrentState<T>(object? payload)
+    {
+        _inTransition.ThrowIfActive();
+        _semaphore.RunAction(() => SetCurrentStateByType(typeof(T), payload));
+    }
 
     /// <summary>
     /// Asynchronously transitions the machine to the registered state of type <typeparamref name="T"/>.
@@ -56,35 +68,46 @@ public class StateMachine
     /// transition runs to completion. Callers should not assume machine state on cancellation —
     /// inspect <see cref="GetCurrentState()"/>.
     /// </remarks>
-    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
-    public Task SetCurrentStateAsync<T>(CancellationToken cancellationToken = default) => SetCurrentStateByTypeAsync(typeof(T), null, cancellationToken);
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task SetCurrentStateAsync<T>(CancellationToken cancellationToken = default)
+    {
+        _inTransition.ThrowIfActive();
+        return _semaphore.RunActionAsync(() => SetCurrentStateByTypeAsync(typeof(T), null, cancellationToken), cancellationToken);
+    }
 
     /// <summary>
     /// Asynchronously transitions to <typeparamref name="T"/> with a typed <paramref name="payload"/>.
     /// </summary>
     /// <remarks>See <see cref="SetCurrentStateAsync{T}(CancellationToken)"/> for cancellation semantics.</remarks>
-    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
-    public Task SetCurrentStateAsync<T>(object? payload, CancellationToken cancellationToken = default) => SetCurrentStateByTypeAsync(typeof(T), payload, cancellationToken);
-
-    internal void SetCurrentStateByType(Type stateType, object? payload = null)
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task SetCurrentStateAsync<T>(object? payload, CancellationToken cancellationToken = default)
     {
-        var task = SetCurrentStateByTypeAsync(stateType, payload);
-        if (task.IsFaulted)
-        {
-            task.GetAwaiter().GetResult();
-        }
+        _inTransition.ThrowIfActive();
+        return _semaphore.RunActionAsync(() => SetCurrentStateByTypeAsync(typeof(T), payload, cancellationToken), cancellationToken);
+    }
 
-        if (task.Status != TaskStatus.RanToCompletion)
+    internal async Task SetCurrentStateByTypeAsync(
+        Type stateType,
+        object? payload = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _inTransition.ThrowIfActive();
+        _inTransition.Value = true;
+        try
         {
-            throw new InvalidOperationException(
-                "This transition involves async callbacks. Use SetCurrentStateAsync instead.");
+            await PerformEnqueuedStateTransitions(cancellationToken);
+            await HandleSetCurrentState(stateType, payload, cancellationToken);
+            await PerformEnqueuedStateTransitions(cancellationToken);
+        }
+        finally
+        {
+            _inTransition.Value = false;
         }
     }
 
-    internal async Task SetCurrentStateByTypeAsync(Type stateType, object? payload = null, CancellationToken cancellationToken = default)
+    private async Task HandleSetCurrentState(Type stateType, object? payload, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
         if (!_nodes.TryGetValue(stateType, out var target))
         {
             throw new InvalidOperationException($"State {stateType} is not registered.");
@@ -116,25 +139,22 @@ public class StateMachine
     /// </summary>
     public void Fire(object trigger, object? payload)
     {
-        var task = FireAsync(trigger, payload);
-        if (task.IsFaulted)
+        _inTransition.ThrowIfActive();
+        _semaphore.RunAction(() =>
         {
-            task.GetAwaiter().GetResult();
-        }
+            var task = FireAsyncIntern(trigger, payload);
+            if (task.IsFaulted)
+            {
+                task.GetAwaiter().GetResult();
+            }
 
-        if (task.Status != TaskStatus.RanToCompletion)
-        {
-            throw new InvalidOperationException(
-                "This transition involves async callbacks. Use FireAsync instead.");
-        }
+            if (task.Status != TaskStatus.RanToCompletion)
+            {
+                throw new InvalidOperationException(
+                    "This transition involves async callbacks. Use FireAsync instead.");
+            }
+        });
     }
-
-    /// <summary>
-    /// Asynchronously fires a trigger on the machine.
-    /// </summary>
-    /// <remarks>See <see cref="FireAsync(object, object?, CancellationToken)"/> for cancellation semantics.</remarks>
-    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
-    public Task FireAsync(object trigger, CancellationToken cancellationToken = default) => FireAsync(trigger, null, cancellationToken);
 
     /// <summary>
     /// Asynchronously fires a trigger with a typed <paramref name="payload"/>.
@@ -148,46 +168,22 @@ public class StateMachine
     /// inspect <see cref="GetCurrentState()"/>.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="trigger"/> is <c>null</c>.</exception>
-    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is cancelled before the transition starts, or surfaced from a user callback that observes the token.</exception>
-    public async Task FireAsync(object trigger, object? payload, CancellationToken cancellationToken = default)
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task FireAsync(object trigger, object? payload, CancellationToken cancellationToken = default)
     {
-        if (trigger is null) throw new ArgumentNullException(nameof(trigger));
-        cancellationToken.ThrowIfCancellationRequested();
-        if (_current is null) throw new InvalidOperationException("Machine has no current state.");
-
-        var key = TriggerKey.Of(trigger);
-        if (!_current.Triggers.TryGetValue(key, out var handler))
-        {
-            TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.NoHandler));
-            return;
-        }
-
-        if (handler.Guard is { } g && !g(payload))
-        {
-            TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.GuardFailed));
-            return;
-        }
-
-        handler.OnFire?.Invoke(trigger);
-
-        if (handler.Target is null)
-        {
-            return;
-        }
-
-        if (!_nodes.TryGetValue(handler.Target, out var target))
-        {
-            throw new InvalidOperationException($"Trigger target state {handler.Target} is not registered.");
-        }
-
-        if (!_ruleMaster.IsAllowed(_current, target))
-        {
-            FailurePolicy.Handle(new TransitionFailureInfo(_current.Type, handler.Target));
-            return;
-        }
-
-        var transition = new Transition(_current, target, trigger, payload, cancellationToken);
-        await _transitionExecutor.ExecuteAsync(transition, this, () => _current = target);
+        _inTransition.ThrowIfActive();
+        return _semaphore.RunActionAsync(() => FireAsyncIntern(trigger, payload, cancellationToken), cancellationToken);
+    }
+    
+    /// <summary>
+    /// Asynchronously fires a trigger on the machine.
+    /// </summary>
+    /// <remarks>See <see cref="FireAsync(object, object?, CancellationToken)"/> for cancellation semantics.</remarks>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    public Task FireAsync(object trigger, CancellationToken cancellationToken = default)
+    {
+        _inTransition.ThrowIfActive();
+        return _semaphore.RunActionAsync(() => FireAsyncIntern(trigger, null, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -228,6 +224,171 @@ public class StateMachine
     /// Returns the current state instance as <see cref="object"/>, or <c>null</c> if no state is currently set.
     /// </summary>
     public object? GetCurrentState() => _current?.GetOrCreateInstance();
+
+    /// <summary>
+    /// Schedules a trigger to fire, either immediately (if called outside a transition) or after the current transition completes (if called from inside a callback).
+    /// </summary>
+    /// <remarks>
+    /// This method is safe to call from <see cref="Statement.Fluent.Api.StateBuilder{TState}.OnEntry"/>,
+    /// <see cref="Statement.Fluent.Api.StateBuilder{TState}.OnExit"/>, and transition callbacks.
+    /// When called from inside a callback, the trigger is queued and will be processed after the current
+    /// transition and all of its callbacks have completed, avoiding re-entrance and deadlock.
+    ///
+    /// Queued triggers are processed in FIFO order. If a queued trigger's callbacks enqueue additional triggers,
+    /// those are appended to the queue and processed after the current trigger completes.
+    ///
+    /// When called outside a transition (e.g., from application code), this method behaves identically to
+    /// <see cref="FireAsync(object, object?, CancellationToken)"/> and fires the trigger immediately.
+    /// </remarks>
+    /// <param name="trigger">The trigger to enqueue or fire. Must not be <c>null</c>.</param>
+    /// <param name="payload">Optional payload to deliver to the target state's entry callback or global transition callbacks.</param>
+    /// <returns>A <see cref="Task"/> that completes when the trigger (and any triggers it enqueues) have finished.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="trigger"/> is <c>null</c>.</exception>
+    public async Task EnqueueAsync(object trigger, object? payload)
+    {
+        if (_inTransition.Value)
+        {
+            _triggerQueue.Enqueue((trigger, payload));
+        }
+        else
+        {
+            await _semaphore.RunActionAsync(() => FireAsyncIntern(trigger, payload));
+        }
+    }
+
+    /// <summary>
+    /// Schedules a trigger to fire synchronously, either immediately (if called outside a transition) or after the current transition completes (if called from inside a callback).
+    /// </summary>
+    /// <remarks>
+    /// This method is the synchronous variant of <see cref="EnqueueAsync(object, object?)"/> and is safe to call from synchronous
+    /// <see cref="Statement.Fluent.Api.StateBuilder{TState}.OnEntry"/>, <see cref="Statement.Fluent.Api.StateBuilder{TState}.OnExit"/>,
+    /// and transition callbacks.
+    ///
+    /// When called from inside a callback, the trigger is queued and will be processed after the current transition and all
+    /// of its callbacks have completed.
+    ///
+    /// When called outside a transition (e.g., from application code), this method behaves identically to
+    /// <see cref="Fire(object, object?)"/> and fires the trigger immediately.
+    ///
+    /// If the enqueued or fired trigger involves async callbacks, an <see cref="InvalidOperationException"/> is thrown
+    /// instructing the caller to use <see cref="EnqueueAsync(object, object?)"/> instead.
+    /// </remarks>
+    /// <param name="trigger">The trigger to enqueue or fire. Must not be <c>null</c>.</param>
+    /// <param name="payload">Optional payload to deliver to the target state's entry callback or global transition callbacks.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="trigger"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">The transition involves async callbacks. Use <see cref="EnqueueAsync(object, object?)"/> instead.</exception>
+    public void Enqueue(object trigger, object? payload)
+    {
+        if (_inTransition.Value)
+        {
+            _triggerQueue.Enqueue((trigger, payload));
+        }
+        else
+        {
+            Fire(trigger, payload);
+        }
+    }
+    
+    /// <summary>
+    /// Asynchronously fires a trigger with a typed <paramref name="payload"/>.
+    /// </summary>
+    /// <remarks>
+    /// Cancellation semantics: the token is checked once before any callback runs and is forwarded to all
+    /// async entry/exit callbacks. Cancellation is best-effort, not transactional —
+    /// if a user callback observes the token (e.g. <c>Task.Delay(ct)</c>) and throws, the transition aborts
+    /// at that point; if cancellation falls between callbacks where the token is not observed, the
+    /// transition runs to completion. Callers should not assume machine state on cancellation —
+    /// inspect <see cref="GetCurrentState()"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="trigger"/> is <c>null</c>.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
+    internal async Task FireAsyncIntern(
+        object trigger,
+        object? payload,
+        CancellationToken cancellationToken = default)
+    {
+        if (trigger is null) throw new ArgumentNullException(nameof(trigger));
+        _inTransition.ThrowIfActive();
+        _inTransition.Value = true;
+        try
+        {
+            await PerformEnqueuedStateTransitions(cancellationToken);
+            await HandleStateTransition(trigger, payload, cancellationToken);
+            await PerformEnqueuedStateTransitions(cancellationToken);
+        }
+        finally
+        {
+            _inTransition.Value = false;
+        }
+    }
+
+    private async Task HandleStateTransition(object trigger, object? payload, CancellationToken cancellationToken)
+    {
+        if (_current is null) throw new InvalidOperationException("Machine has no current state.");
+
+        var key = TriggerKey.Of(trigger);
+        if (!_current.Triggers.TryGetValue(key, out var handler))
+        {
+            TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.NoHandler));
+            return;
+        }
+
+        if (handler.Guard is { } g && !g(payload))
+        {
+            TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.GuardFailed));
+            return;
+        }
+
+        handler.OnFire?.Invoke(trigger);
+
+        if (handler.Target is null)
+        {
+            return;
+        }
+
+        if (!_nodes.TryGetValue(handler.Target, out var target))
+        {
+            throw new InvalidOperationException($"Trigger target state {handler.Target} is not registered.");
+        }
+
+        if (!_ruleMaster.IsAllowed(_current, target))
+        {
+            FailurePolicy.Handle(new TransitionFailureInfo(_current.Type, handler.Target));
+            return;
+        }
+
+        var transition = new Transition(_current, target, trigger, payload, cancellationToken);
+        await _transitionExecutor.ExecuteAsync(transition, this, () => _current = target);
+    }
+
+    private async Task PerformEnqueuedStateTransitions(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_triggerQueue.Count > 0)
+        {
+            //we will drain the queued triggers first before handling new triggers
+            await DrainQueueAsync(cancellationToken);
+        }
+    }
+
+    private async Task DrainQueueAsync(CancellationToken cancellationToken = default)
+    {
+        while (_triggerQueue.Count > 0)
+        {
+            var(trigger, payload) = _triggerQueue.Dequeue();
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await HandleStateTransition(trigger, payload, cancellationToken);
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                TriggerFailurePolicy.Handle(
+                    new TriggerFailureInfo(_current?.Type, trigger, TriggerFailureReason.HandlerThrew, ex));
+                // continue draining on transition errors
+            }
+        }
+    }
 
     internal void AddTransitionCallbacks(params Func<TransitionInformation, Task>[] callbacks)
     {
@@ -365,5 +526,20 @@ public class StateMachine
             node.PreInstantiate();
         }
         _innerParentType = typeof(T);
+    }
+    
+    private void SetCurrentStateByType(Type stateType, object? payload = null)
+    {
+        var task = SetCurrentStateByTypeAsync(stateType, payload);
+        if (task.IsFaulted)
+        {
+            task.GetAwaiter().GetResult();
+        }
+
+        if (task.Status != TaskStatus.RanToCompletion)
+        {
+            throw new InvalidOperationException(
+                "This transition involves async callbacks. Use SetCurrentStateAsync instead.");
+        }
     }
 }
