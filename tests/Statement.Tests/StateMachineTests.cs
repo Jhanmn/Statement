@@ -1,6 +1,5 @@
 using Statement.Tests.TestStates;
 using Statement.Tests.TestStates.Statement;
-using Statement;
 using Statement.Fluent.Api;
 
 namespace Statement.Tests;
@@ -284,4 +283,97 @@ public class StateMachineTests
     private class UnregisteredState
     {
     }
+
+    [Test]
+    public void GetAllRegisteredStateTypes_ReturnsAllRegisteredTypes()
+    {
+        var machine = StateMachineBuilder.New()
+        .AddState<InitialUnitTestState>()
+        .AddState<SimpleUnitTestState>()
+        .AddState<AdvancedUnitTestState>()
+        .StartIn<InitialUnitTestState>()
+        .Build();
+
+        var states = machine.GetAllRegisteredStateTypes();
+        Assert.That(states, Has.Count.EqualTo(3));
+        Assert.That(states, Contains.Item(typeof(InitialUnitTestState)));
+        Assert.That(states, Contains.Item(typeof(SimpleUnitTestState)));
+        Assert.That(states, Contains.Item(typeof(AdvancedUnitTestState)));
+    }
+
+    [Test]
+    public void GetAllRegisteredStateInstances_ReturnsAllInstances()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<InitialUnitTestState>()
+            .AddState<SimpleUnitTestState>()
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<InitialUnitTestState>()
+            .Build();
+
+        var instances = machine.GetAllRegisteredStateInstances();
+
+        Assert.That(instances, Has.Count.EqualTo(3));
+        Assert.That(instances[0], Is.InstanceOf<InitialUnitTestState>());
+        Assert.That(instances[1], Is.InstanceOf<SimpleUnitTestState>());
+        Assert.That(instances[2], Is.InstanceOf<AdvancedUnitTestState>());
+    }
+
+    #region CanTransitionTo
+
+    [Test]
+    public void CanTransitionTo_AllowedTransition_ReturnsTrue()
+    {
+        _machine.SetCurrentState<SimpleUnitTestState>();
+
+        Assert.That(_machine.CanTransitionTo(typeof(AdvancedUnitTestState)), Is.True);
+    }
+
+    [Test]
+    public void CanTransitionTo_ForbiddenTransition_ReturnsFalse()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        Assert.That(machine.CanTransitionTo(typeof(AdvancedUnitTestState)), Is.False);
+    }
+
+    #endregion
+
+    #region PossibleNextTransitions
+
+    [Test]
+    public void PossibleNextTransitions_NoRules_ReturnsAllStates()
+    {
+        _machine.SetCurrentState<SimpleUnitTestState>();
+
+        var possible = _machine.PossibleNextTransitions().ToList();
+
+        Assert.That(possible, Has.Count.EqualTo(3));
+        Assert.That(possible, Contains.Item(typeof(InitialUnitTestState)));
+        Assert.That(possible, Contains.Item(typeof(SimpleUnitTestState)));
+        Assert.That(possible, Contains.Item(typeof(AdvancedUnitTestState)));
+    }
+
+    [Test]
+    public void PossibleNextTransitions_WithForbidden_ExcludesForbiddenState()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<SimpleUnitTestState>(s => s.CannotTransitionTo<AdvancedUnitTestState>())
+            .AddState<AdvancedUnitTestState>()
+            .AddState<InitialUnitTestState>()
+            .StartIn<SimpleUnitTestState>()
+            .Build();
+
+        var possible = machine.PossibleNextTransitions().ToList();
+
+        Assert.That(possible, Does.Not.Contain(typeof(AdvancedUnitTestState)));
+        Assert.That(possible, Contains.Item(typeof(SimpleUnitTestState)));
+        Assert.That(possible, Contains.Item(typeof(InitialUnitTestState)));
+    }
+
+    #endregion
 }

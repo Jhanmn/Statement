@@ -16,7 +16,7 @@ public class RuleMasterTests
     {
         var target = new StateNode(typeof(SimpleUnitTestState));
 
-        Assert.That(_ruleMaster.IsAllowed(null, target), Is.True);
+        Assert.That(_ruleMaster.IsAllowedTransition(null, target), Is.True);
     }
 
     [Test]
@@ -24,13 +24,13 @@ public class RuleMasterTests
     {
         var current = new StateNode(typeof(SimpleUnitTestState));
 
-        Assert.That(_ruleMaster.IsAllowed(current, null), Is.True);
+        Assert.That(_ruleMaster.IsAllowedTransition(current, targetNode: null), Is.True);
     }
 
     [Test]
     public void IsAllowed_BothNull_ReturnsTrue()
     {
-        Assert.That(_ruleMaster.IsAllowed(null, null), Is.True);
+        Assert.That(_ruleMaster.IsAllowedTransition(current: null, targetNode: null), Is.True);
     }
 
     [Test]
@@ -39,7 +39,7 @@ public class RuleMasterTests
         var current = new StateNode(typeof(SimpleUnitTestState));
         var target = new StateNode(typeof(AdvancedUnitTestState));
 
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.True);
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.True);
     }
 
     [Test]
@@ -52,7 +52,7 @@ public class RuleMasterTests
         current.TransitionRule.ForbiddenNextStates.Add(typeof(ExtraUnitTestState));
         var target = new StateNode(typeof(AdvancedUnitTestState));
 
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.True);
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.True);
     }
 
     [Test]
@@ -65,7 +65,7 @@ public class RuleMasterTests
         current.TransitionRule.ForbiddenNextStates.Add(typeof(AdvancedUnitTestState));
         var target = new StateNode(typeof(AdvancedUnitTestState));
 
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.False);
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.False);
     }
 
     [Test]
@@ -77,7 +77,7 @@ public class RuleMasterTests
         };
         var target = new StateNode(typeof(AdvancedUnitTestState));
 
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.True);
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.True);
     }
 
     [Test]
@@ -93,7 +93,7 @@ public class RuleMasterTests
         
         var target = new StateNode(typeof(AdvancedUnitTestState));
         
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.True);   
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.True);   
     }
     
     [Test]
@@ -109,7 +109,7 @@ public class RuleMasterTests
         
         var target = new StateNode(typeof(AdvancedUnitTestState));
         
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.False);   
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.False);   
     }
 
     [Test]
@@ -122,7 +122,7 @@ public class RuleMasterTests
         
         var target = new StateNode(typeof(AdvancedUnitTestState));
         
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.True);  
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.True);  
     }
     
     [Test]
@@ -136,9 +136,121 @@ public class RuleMasterTests
                 ForbiddenNextStates = { typeof(AdvancedUnitTestState) }
             }
         };
-        
+
         var target = new StateNode(typeof(AdvancedUnitTestState));
-        
-        Assert.That(_ruleMaster.IsAllowed(current, target), Is.False); 
+
+        Assert.That(_ruleMaster.IsAllowedTransition(current, target), Is.False);
     }
+
+    #region CheckIfTypeIsValidNextState
+
+    [Test]
+    public void CheckType_CurrentIsNull_ThrowsInvalidOperationException()
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => _ruleMaster.CheckIfTypeIsValidNextState(null, typeof(SimpleUnitTestState)));
+    }
+
+    [Test]
+    public void CheckType_NoTransitionRule_ReturnsTrue()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState));
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.True);
+    }
+
+    [Test]
+    public void CheckType_EmptyRule_ReturnsTrue()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule()
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.True);
+    }
+
+    [Test]
+    public void CheckType_TargetIsForbidden_ReturnsFalse()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule
+            {
+                ForbiddenNextStates = { typeof(AdvancedUnitTestState) }
+            }
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.False);
+    }
+
+    [Test]
+    public void CheckType_TargetNotForbidden_ReturnsTrue()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule
+            {
+                ForbiddenNextStates = { typeof(ExtraUnitTestState) }
+            }
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.True);
+    }
+
+    [Test]
+    public void CheckType_TargetInAllowedList_ReturnsTrue()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule
+            {
+                AllowedNextStates = { typeof(AdvancedUnitTestState), typeof(ExtraUnitTestState) }
+            }
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.True);
+    }
+
+    [Test]
+    public void CheckType_TargetNotInAllowedList_ReturnsFalse()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule
+            {
+                AllowedNextStates = { typeof(InitialUnitTestState), typeof(ExtraUnitTestState) }
+            }
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.False);
+    }
+
+    [Test]
+    public void CheckType_TargetAllowedButAlsoForbidden_ReturnsFalse()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule
+            {
+                AllowedNextStates = { typeof(AdvancedUnitTestState) },
+                ForbiddenNextStates = { typeof(AdvancedUnitTestState) }
+            }
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(AdvancedUnitTestState)), Is.False);
+    }
+
+    [Test]
+    public void CheckType_EmptyAllowedList_NoForbidden_ReturnsTrue()
+    {
+        var current = new StateNode(typeof(SimpleUnitTestState))
+        {
+            TransitionRule = new TransitionRule()
+        };
+
+        Assert.That(_ruleMaster.CheckIfTypeIsValidNextState(current, typeof(InitialUnitTestState)), Is.True);
+    }
+
+    #endregion
 }

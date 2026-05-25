@@ -113,7 +113,7 @@ public class StateMachine
             throw new InvalidOperationException($"State {stateType} is not registered.");
         }
 
-        if (!_ruleMaster.IsAllowed(_current, target))
+        if (!_ruleMaster.IsAllowedTransition(_current, target))
         {
             FailurePolicy.Handle(new TransitionFailureInfo(_current?.Type, stateType));
             return;
@@ -288,6 +288,47 @@ public class StateMachine
             Fire(trigger, payload);
         }
     }
+
+    /// <summary>
+    /// Enumerates all registered state types that the machine is currently allowed to transition to,
+    /// based on the active state's transition rules.
+    /// </summary>
+    /// <returns>The <see cref="Type"/> keys of every reachable state from the current state.</returns>
+    public IEnumerable<Type> PossibleNextTransitions()
+    {
+        foreach (var nodePair in _nodes)
+        {
+            if (_ruleMaster.IsAllowedTransition(_current, nodePair.Value))
+            {
+                yield return nodePair.Key;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets a list of all state types registered on this state machine.
+    /// </summary>
+    /// <returns>
+    /// A list of all <see cref="Type"/> objects representing the registered state types.
+    /// The list includes every state type added to the machine during configuration,
+    /// regardless of whether transitions to them are currently allowed from the active state.
+    /// </returns>
+    public IList<Type> GetAllRegisteredStateTypes() => _nodes.Values.Select(stateNode => stateNode.Type).ToList();
+    
+    /// <summary>
+    /// Gets a list of all state instances registered on this state machine.
+    /// </summary>
+    public IList<object> GetAllRegisteredStateInstances() 
+        => _nodes.Values.Select(stateNode => stateNode.GetOrCreateInstance()).ToList();
+
+    /// <summary>
+    /// Checks whether a transition from the current state to <paramref name="possibleNextState"/> is permitted
+    /// by the current state's transition rules.
+    /// </summary>
+    /// <param name="possibleNextState">The target state type to check.</param>
+    /// <remarks>will throw <see cref="InvalidOperationException"/> if method was called before final build of statemachine</remarks>
+    /// <returns><c>true</c> if the transition is allowed; otherwise <c>false</c>.</returns>
+    public bool CanTransitionTo(Type possibleNextState) => _ruleMaster.CheckIfTypeIsValidNextState(_current, possibleNextState);
     
     /// <summary>
     /// Asynchronously fires a trigger with a typed <paramref name="payload"/>.
@@ -351,7 +392,7 @@ public class StateMachine
             throw new InvalidOperationException($"Trigger target state {handler.Target} is not registered.");
         }
 
-        if (!_ruleMaster.IsAllowed(_current, target))
+        if (!_ruleMaster.IsAllowedTransition(_current, target))
         {
             FailurePolicy.Handle(new TransitionFailureInfo(_current.Type, handler.Target));
             return;
