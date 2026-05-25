@@ -599,4 +599,153 @@ public class TriggerTests
         var ex = Assert.Throws<TriggerFailedException>(() => machine.Fire(DoorTrigger.Close));
         Assert.That(ex!.Info.Reason, Is.EqualTo(TriggerFailureReason.NoHandler));
     }
+
+    // ---- 17. Trigger introspection: GetAllPossibleTriggers / HasTrigger / CanTrigger ----
+
+    [Test]
+    public void GetAllPossibleTriggers_ReturnsKeysRegisteredOnCurrentState()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s =>
+            {
+                s.On<OpenDoor>().GoTo<Opened>();
+                s.On(DoorTrigger.Lock).GoTo<Locked>();
+            })
+            .AddState<Opened>()
+            .AddState<Locked>()
+            .StartIn<Closed>()
+            .Build();
+
+        var triggers = machine.GetAllPossibleTriggers();
+
+        Assert.That(triggers, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public void GetAllPossibleTriggers_ReflectsCurrentStateAfterTransition()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>(s => s.On<CloseDoor>().GoTo<Closed>())
+            .StartIn<Closed>()
+            .Build();
+
+        machine.Fire(new OpenDoor());
+
+        var triggers = machine.GetAllPossibleTriggers();
+        Assert.That(triggers, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void HasTrigger_ReturnsTrue_WhenHandlerRegistered()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.HasTrigger(new OpenDoor()), Is.True);
+    }
+
+    [Test]
+    public void HasTrigger_ReturnsFalse_WhenNoHandlerRegistered()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.HasTrigger(new CloseDoor()), Is.False);
+    }
+
+    [Test]
+    public void HasTrigger_WorksWithEnumTrigger()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On(DoorTrigger.Open).GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.HasTrigger(DoorTrigger.Open), Is.True);
+        Assert.That(machine.HasTrigger(DoorTrigger.Close), Is.False);
+    }
+
+    [Test]
+    public void CanTrigger_ReturnsTrue_WhenHandlerAndTransitionAreAllowed()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanTrigger(new OpenDoor()), Is.True);
+    }
+
+    [Test]
+    public void CanTrigger_ReturnsFalse_WhenNoHandlerRegistered()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanTrigger(new CloseDoor()), Is.False);
+    }
+
+    [Test]
+    public void CanTrigger_ReturnsFalse_WhenTargetTransitionIsForbidden()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s =>
+            {
+                s.CannotTransitionTo<Opened>();
+                s.On<OpenDoor>().GoTo<Opened>();
+            })
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.HasTrigger(new OpenDoor()), Is.True);
+        Assert.That(machine.CanTrigger(new OpenDoor()), Is.False);
+    }
+
+    [Test]
+    public void CanTrigger_ReturnsFalse_WhenTargetIsNotInAllowedList()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s =>
+            {
+                s.CanTransitionTo<Locked>();
+                s.On<OpenDoor>().GoTo<Opened>();
+            })
+            .AddState<Opened>()
+            .AddState<Locked>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanTrigger(new OpenDoor()), Is.False);
+    }
+
+    [Test]
+    public void CanTrigger_ReflectsCurrentStateAfterTransition()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>(s => s.On<CloseDoor>().GoTo<Closed>())
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanTrigger(new OpenDoor()), Is.True);
+        Assert.That(machine.CanTrigger(new CloseDoor()), Is.False);
+
+        machine.Fire(new OpenDoor());
+
+        Assert.That(machine.CanTrigger(new OpenDoor()), Is.False);
+        Assert.That(machine.CanTrigger(new CloseDoor()), Is.True);
+    }
 }

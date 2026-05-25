@@ -326,9 +326,66 @@ public class StateMachine
     /// by the current state's transition rules.
     /// </summary>
     /// <param name="possibleNextState">The target state type to check.</param>
-    /// <remarks>will throw <see cref="InvalidOperationException"/> if method was called before final build of statemachine</remarks>
+    /// <remarks>will throw <see cref="InvalidOperationException"/> if method was called before final build of <see cref="StateMachine"/></remarks>
     /// <returns><c>true</c> if the transition is allowed; otherwise <c>false</c>.</returns>
     public bool CanTransitionTo(Type possibleNextState) => _ruleMaster.CheckIfTypeIsValidNextState(_current, possibleNextState);
+
+    /// <summary>
+    /// Returns the triggers that the current state has handlers registered for.
+    /// </summary>
+    /// <remarks>
+    /// The result reflects only the trigger keys configured on the active state's trigger table.
+    /// It does not evaluate per-handler guards or transition rules, so a trigger present in this list
+    /// may still be rejected at fire time if its guard fails or the target transition is blocked.
+    /// Returns an empty list when no state is currently set.
+    /// </remarks>
+    /// <returns>A list of trigger keys registered on the current state.</returns>
+    public List<object> GetAllPossibleTriggers() => (_current?.Triggers.Keys ?? Enumerable.Empty<object>()).ToList();
+
+    /// <summary>
+    /// Checks whether the current state has a handler registered for <paramref name="trigger"/>.
+    /// </summary>
+    /// <param name="trigger">The trigger value to check. Any non-null object — marker type instance, enum value, string, etc.</param>
+    /// <remarks>
+    /// This only checks for handler presence; it does not evaluate the handler's guard or the target
+    /// state's transition rules. A return value of <c>true</c> does not guarantee that firing the trigger
+    /// will result in a transition. Returns <c>false</c> when no state is currently set.
+    /// </remarks>
+    /// <returns><c>true</c> if a handler is registered for the trigger on the current state; otherwise <c>false</c>.</returns>
+    public bool HasTrigger(object trigger) => _current?.Triggers.ContainsKey(TriggerKey.Of(trigger)) ?? false;
+
+    /// <summary>
+    /// Checks whether firing <paramref name="trigger"/> on the current state would lead to an allowed transition.
+    /// </summary>
+    /// <param name="trigger">The trigger value to check. Any non-null object — marker type instance, enum value, string, etc.</param>
+    /// <remarks>
+    /// Returns <c>true</c> only if the current state has a handler registered for the trigger, the handler
+    /// has a target state, and the configured transition rules permit moving from the current state to that target.
+    /// Per-handler guards are not evaluated here, so a <c>true</c> result does not guarantee the transition will run —
+    /// a guard may still reject it at fire time. Use <see cref="HasTrigger(object)"/> to check only for handler presence.
+    /// </remarks>
+    /// <returns><c>true</c> if the trigger is handled and its target transition is currently allowed; otherwise <c>false</c>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if the machine has no current state (i.e., the builder's <c>Build</c> step has not run).</exception>
+    public bool CanTrigger(object trigger)
+    {
+        if (_current is null)
+        {
+            throw new InvalidOperationException("Machine has no current state. Call >>build<< before calling this method.");
+        }
+        
+        if (!HasTrigger(trigger))
+        {
+            return false;
+        }
+
+        var triggerHandler = _current.Triggers[TriggerKey.Of(trigger)];
+        if (triggerHandler?.Target != null && _ruleMaster.CheckIfTypeIsValidNextState(_current, triggerHandler.Target))
+        {
+            return true;
+        }
+
+        return false;
+    }
     
     /// <summary>
     /// Asynchronously fires a trigger with a typed <paramref name="payload"/>.
