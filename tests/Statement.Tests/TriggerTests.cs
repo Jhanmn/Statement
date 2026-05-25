@@ -748,4 +748,180 @@ public class TriggerTests
         Assert.That(machine.CanTrigger(new OpenDoor()), Is.False);
         Assert.That(machine.CanTrigger(new CloseDoor()), Is.True);
     }
+
+    // ---- 18. CanFire (guard-aware) ----
+
+    [Test]
+    public void CanFire_ReturnsTrue_WhenNoGuardAndTransitionAllowed()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.True);
+    }
+
+    [Test]
+    public void CanFire_ReturnsTrue_WhenGuardPasses()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().If(() => true).GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.True);
+    }
+
+    [Test]
+    public void CanFire_ReturnsFalse_WhenGuardFails()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().If(() => false).GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.HasTrigger(new OpenDoor()), Is.True);
+        Assert.That(machine.CanTrigger(new OpenDoor()), Is.True);
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.False);
+    }
+
+    [Test]
+    public void CanFire_ReturnsFalse_WhenNoHandlerRegistered()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new CloseDoor(), null), Is.False);
+    }
+
+    [Test]
+    public void CanFire_ReturnsFalse_WhenTransitionForbiddenByRule()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s =>
+            {
+                s.CannotTransitionTo<Opened>();
+                s.On<OpenDoor>().If(() => true).GoTo<Opened>();
+            })
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.HasTrigger(new OpenDoor()), Is.True);
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.False);
+    }
+
+    [Test]
+    public void CanFire_PassesPayloadToTypedGuard()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<LockDoor>()
+                .If<LockDoor>(p => p.KeyId == "master")
+                .GoTo<Locked>())
+            .AddState<Locked>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new LockDoor("master"), new LockDoor("master")), Is.True);
+        Assert.That(machine.CanFire(new LockDoor("wrong"), new LockDoor("wrong")), Is.False);
+    }
+
+    [Test]
+    public void CanFire_TypedGuard_FailsWhenPayloadIsNull()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<LockDoor>()
+                .If<LockDoor>(p => p.KeyId == "master")
+                .GoTo<Locked>())
+            .AddState<Locked>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new LockDoor("master"), null), Is.False);
+    }
+
+    [Test]
+    public void CanFire_GuardSeesUpdatedClosureState()
+    {
+        var allow = false;
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().If(() => allow).GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.False);
+
+        allow = true;
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.True);
+    }
+
+    [Test]
+    public void CanFire_GuardExceptionPropagates()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().If(() => throw new InvalidOperationException("boom")).GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => machine.CanFire(new OpenDoor(), null));
+        Assert.That(ex!.Message, Is.EqualTo("boom"));
+    }
+
+    [Test]
+    public void CanFire_DoesNotInvokeDoSideEffect()
+    {
+        var fireCount = 0;
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>()
+                .If(() => true)
+                .Do(_ => fireCount++)
+                .GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.True);
+        Assert.That(fireCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void CanFire_DoesNotTransition()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().If(() => true).GoTo<Opened>())
+            .AddState<Opened>()
+            .StartIn<Closed>()
+            .Build();
+
+        machine.CanFire(new OpenDoor(), null);
+
+        Assert.That(machine.GetCurrentState(), Is.TypeOf<Closed>());
+    }
+
+    [Test]
+    public void CanFire_ReflectsCurrentStateAfterTransition()
+    {
+        var machine = StateMachineBuilder.New()
+            .AddState<Closed>(s => s.On<OpenDoor>().If(() => true).GoTo<Opened>())
+            .AddState<Opened>(s => s.On<CloseDoor>().If(() => false).GoTo<Closed>())
+            .StartIn<Closed>()
+            .Build();
+
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.True);
+        Assert.That(machine.CanFire(new CloseDoor(), null), Is.False);
+
+        machine.Fire(new OpenDoor());
+
+        Assert.That(machine.CanFire(new OpenDoor(), null), Is.False);
+        Assert.That(machine.CanFire(new CloseDoor(), null), Is.False);
+    }
 }

@@ -294,7 +294,7 @@ public class StateMachine
     /// based on the active state's transition rules.
     /// </summary>
     /// <returns>The <see cref="Type"/> keys of every reachable state from the current state.</returns>
-    public IReadOnlyCollection<Type> PossibleNextTransitions()
+    public IReadOnlyList<Type> PossibleNextTransitions()
         => (from nodePair 
             in _nodes 
             where _ruleMaster.IsAllowedTransition(_current, nodePair.Value) 
@@ -308,12 +308,12 @@ public class StateMachine
     /// The list includes every state type added to the machine during configuration,
     /// regardless of whether transitions to them are currently allowed from the active state.
     /// </returns>
-    public IReadOnlyCollection<Type> GetAllRegisteredStateTypes() => _nodes.Values.Select(stateNode => stateNode.Type).ToList();
+    public IReadOnlyList<Type> GetAllRegisteredStateTypes() => _nodes.Values.Select(stateNode => stateNode.Type).ToList();
     
     /// <summary>
     /// Gets a list of all state instances registered on this state machine.
     /// </summary>
-    public IReadOnlyCollection<object> GetAllRegisteredStateInstances() 
+    public IReadOnlyList<object> GetAllRegisteredStateInstances() 
         => _nodes.Values.Select(stateNode => stateNode.GetOrCreateInstance()).ToList();
 
     /// <summary>
@@ -380,6 +380,44 @@ public class StateMachine
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Checks whether firing <paramref name="trigger"/> with <paramref name="payload"/> on the current state
+    /// would result in an allowed transition, including evaluation of the handler's guard.
+    /// </summary>
+    /// <param name="trigger">The trigger value to check. Any non-null object — marker type instance, enum value, string, etc.</param>
+    /// <param name="payload">The payload that would be forwarded to the guard. Passed through as-is; may be <c>null</c>.</param>
+    /// <remarks>
+    /// Returns <c>true</c> only if all the following hold: the current state has a handler registered for
+    /// the trigger, the handler has a target state, the configured transition rules permit the transition,
+    /// and the handler's guard (if any) returns <c>true</c> for <paramref name="payload"/>.
+    /// <para>
+    /// This method invokes user-supplied guard code. Guards are expected to be pure and side-effect-free;
+    /// if a caller follows <c>CanFire</c> with <see cref="Fire(object)"/>/<see cref="Fire(object,object)"/>,
+    /// the guard will run twice. Exceptions thrown from the guard propagate to the caller.
+    /// </para>
+    /// Use <see cref="CanTrigger(object)"/> if you want the same check without evaluating the guard,
+    /// or <see cref="HasTrigger(object)"/> to check only for handler presence.
+    /// </remarks>
+    /// <returns><c>true</c> if the trigger would fire and transition under current rules and guard; otherwise <c>false</c>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if the machine has no current state (i.e., the builder's <c>Build</c> step has not run).</exception>
+    public bool CanFire(object trigger, object? payload)
+    {
+        if (_current is null)
+        {
+            throw new InvalidOperationException("Machine has no current state. Call >>build<< before calling this method.");
+        }
+
+        if (!HasTrigger(trigger))
+        {
+            return false;
+        }
+
+        var triggerHandler = _current.Triggers[TriggerKey.Of(trigger)];
+        return triggerHandler?.Target != null
+               && _ruleMaster.CheckIfTypeIsValidNextState(_current, triggerHandler.Target)
+               && (triggerHandler.Guard is null || triggerHandler.Guard(payload));
     }
     
     /// <summary>
