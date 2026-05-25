@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Statement;
@@ -48,4 +50,19 @@ public class StateMachine<T> : StateMachine where T : class
     /// Asynchronously transitions to <typeparamref name="TState"/> with a typed <paramref name="payload"/>.
     /// </summary>
     public Task SetCurrentStateAsync<TState>(object? payload) where TState : T => base.SetCurrentStateAsync<TState>(payload);
+
+    /// <summary>
+    /// Returns all registered state instances as <typeparamref name="T"/>.
+    /// </summary>
+    public new IList<T> GetAllRegisteredStateInstances()
+        => base.GetAllRegisteredStateInstances().Cast<T>().ToList();
+
+    /// <summary>
+    /// Checks whether a transition from the current state to <typeparamref name="TState"/> is permitted
+    /// by the current state's transition rules.
+    /// </summary>
+    /// <typeparam name="TState">The target state type to check. Must derive from or implement <typeparamref name="T"/>.</typeparam>
+    /// <remarks>will throw <see cref="System.InvalidOperationException"/> if method was called before final build of <see cref="StateMachine"/></remarks>
+    /// <returns><c>true</c> if the transition is allowed; otherwise <c>false</c>.</returns>
+    public bool CanTransitionTo<TState>() where TState : T => CanTransitionTo(typeof(TState));
 }

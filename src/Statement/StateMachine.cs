@@ -294,16 +294,11 @@ public class StateMachine
     /// based on the active state's transition rules.
     /// </summary>
     /// <returns>The <see cref="Type"/> keys of every reachable state from the current state.</returns>
-    public IEnumerable<Type> PossibleNextTransitions()
-    {
-        foreach (var nodePair in _nodes)
-        {
-            if (_ruleMaster.IsAllowedTransition(_current, nodePair.Value))
-            {
-                yield return nodePair.Key;
-            }
-        }
-    }
+    public IReadOnlyCollection<Type> PossibleNextTransitions()
+        => (from nodePair 
+            in _nodes 
+            where _ruleMaster.IsAllowedTransition(_current, nodePair.Value) 
+            select nodePair.Key).ToList();
 
     /// <summary>
     /// Gets a list of all state types registered on this state machine.
@@ -313,12 +308,12 @@ public class StateMachine
     /// The list includes every state type added to the machine during configuration,
     /// regardless of whether transitions to them are currently allowed from the active state.
     /// </returns>
-    public IList<Type> GetAllRegisteredStateTypes() => _nodes.Values.Select(stateNode => stateNode.Type).ToList();
+    public IReadOnlyCollection<Type> GetAllRegisteredStateTypes() => _nodes.Values.Select(stateNode => stateNode.Type).ToList();
     
     /// <summary>
     /// Gets a list of all state instances registered on this state machine.
     /// </summary>
-    public IList<object> GetAllRegisteredStateInstances() 
+    public IReadOnlyCollection<object> GetAllRegisteredStateInstances() 
         => _nodes.Values.Select(stateNode => stateNode.GetOrCreateInstance()).ToList();
 
     /// <summary>
@@ -339,8 +334,8 @@ public class StateMachine
     /// may still be rejected at fire time if its guard fails or the target transition is blocked.
     /// Returns an empty list when no state is currently set.
     /// </remarks>
-    /// <returns>A list of trigger keys registered on the current state.</returns>
-    public List<object> GetAllPossibleTriggers() => (_current?.Triggers.Keys ?? Enumerable.Empty<object>()).ToList();
+    /// <returns>A list of trigger keys registered in the current state.</returns>
+    public IReadOnlyCollection<object> GetAllPossibleTriggers() => (_current?.Triggers.Keys ?? Enumerable.Empty<object>()).ToList();
 
     /// <summary>
     /// Checks whether the current state has a handler registered for <paramref name="trigger"/>.
