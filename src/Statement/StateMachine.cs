@@ -27,12 +27,36 @@ public class StateMachine
     private readonly SemaphoreSlim _semaphore = new(initialCount: 1,maxCount: 1);
     private readonly AsyncLocal<bool> _inTransition = new();
     private readonly Queue<(object trigger, object? payload)> _triggerQueue = [];
+    private volatile StateMachineState _executionState = StateMachineState.Active;
 
     internal StateMachine() { }
     internal TransitionFailurePolicy FailurePolicy { get; set; } = TransitionFailurePolicy.Silent;
     internal TriggerFailurePolicy TriggerFailurePolicy { get; set; } = TriggerFailurePolicy.Silent;
 
+    /// <summary>
+    /// Current execution state of the machine. When <see cref="StateMachineState.Paused"/>, transition and trigger
+    /// calls are short-circuited and reported through the configured failure policy.
+    /// <remarks>
+    ///changing the <see cref="ExecutionState"/> does not affect any currently active transition. They will not abort!
+    /// </remarks>
+    /// </summary>
+    public StateMachineState ExecutionState
+    {
+        get => _executionState;
+        private set => _executionState = value;
+    }
+
     private bool IsCompiledWithType => _innerParentType is not null;
+
+    /// <summary>
+    /// Pauses the machine. Subsequent transition and trigger requests are skipped until <see cref="Resume"/> is called.
+    /// </summary>
+    public void Pause() => ExecutionState = StateMachineState.Paused;
+
+    /// <summary>
+    /// Resumes the machine after a previous <see cref="Pause"/> call.
+    /// </summary>
+    public void Resume() =>  ExecutionState = StateMachineState.Active;
 
     /// <summary>
     /// Transitions the machine to the registered state of type <typeparamref name="T"/>.
@@ -42,6 +66,11 @@ public class StateMachine
     /// <typeparam name="T">The state type to switch to. Must have been registered on this machine.</typeparam>
     public void SetCurrentState<T>()
     {
+        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), typeof(T)))
+        {
+            return;
+        }
+        
         _inTransition.ThrowIfActive();
         _semaphore.RunAction(() => SetCurrentStateByType(typeof(T), null));
     }
@@ -53,6 +82,11 @@ public class StateMachine
     /// </summary>
     public void SetCurrentState<T>(object? payload)
     {
+        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), typeof(T)))
+        {
+            return;
+        }
+        
         _inTransition.ThrowIfActive();
         _semaphore.RunAction(() => SetCurrentStateByType(typeof(T), payload));
     }
@@ -71,6 +105,11 @@ public class StateMachine
     /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
     public Task SetCurrentStateAsync<T>(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), typeof(T)))
+        {
+            return Task.CompletedTask;
+        }
         _inTransition.ThrowIfActive();
         return _semaphore.RunActionAsync(() => SetCurrentStateByTypeAsync(typeof(T), null, cancellationToken), cancellationToken);
     }
@@ -82,6 +121,11 @@ public class StateMachine
     /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
     public Task SetCurrentStateAsync<T>(object? payload, CancellationToken cancellationToken = default)
     {
+        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), typeof(T)))
+        {
+            return Task.CompletedTask;
+        }
+        
         _inTransition.ThrowIfActive();
         return _semaphore.RunActionAsync(() => SetCurrentStateByTypeAsync(typeof(T), payload, cancellationToken), cancellationToken);
     }
@@ -92,6 +136,16 @@ public class StateMachine
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), stateType))
+        {
+            return;
+        }
+
+        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), stateType))
+        {
+            return;
+        }
+        
         _inTransition.ThrowIfActive();
         _inTransition.Value = true;
         try
@@ -115,7 +169,7 @@ public class StateMachine
 
         if (!_ruleMaster.IsAllowedTransition(_current, target))
         {
-            FailurePolicy.Handle(new TransitionFailureInfo(_current?.Type, stateType));
+            FailurePolicy.Handle(new TransitionFailureInfo(_current?.Type, stateType, TransitionFailureReason.BlockedByRule));
             return;
         }
 
@@ -139,6 +193,11 @@ public class StateMachine
     /// </summary>
     public void Fire(object trigger, object? payload)
     {
+        if (!ExecutionState.ReportIfPausedAndBlock(TriggerFailurePolicy, _current?.GetType(), trigger))
+        {
+            return;
+        }
+        
         _inTransition.ThrowIfActive();
         _semaphore.RunAction(() =>
         {
@@ -171,6 +230,12 @@ public class StateMachine
     /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
     public Task FireAsync(object trigger, object? payload, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ExecutionState.ReportIfPausedAndBlock(TriggerFailurePolicy, _current?.GetType(), trigger))
+        {
+            return Task.CompletedTask;
+        }
+        
         _inTransition.ThrowIfActive();
         return _semaphore.RunActionAsync(() => FireAsyncIntern(trigger, payload, cancellationToken), cancellationToken);
     }
@@ -182,6 +247,11 @@ public class StateMachine
     /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
     public Task FireAsync(object trigger, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ExecutionState.ReportIfPausedAndBlock(TriggerFailurePolicy, _current?.GetType(), trigger))
+        {
+            return Task.CompletedTask;
+        }
         _inTransition.ThrowIfActive();
         return _semaphore.RunActionAsync(() => FireAsyncIntern(trigger, null, cancellationToken), cancellationToken);
     }
@@ -404,6 +474,11 @@ public class StateMachine
     /// <exception cref="InvalidOperationException">Thrown if the machine has no current state (i.e., the builder's <c>Build</c> step has not run).</exception>
     public bool CanFire(object trigger, object? payload)
     {
+        if (!ExecutionState.ReportIfPausedAndBlock(TriggerFailurePolicy, _current?.GetType(), trigger))
+        {
+            return false;
+        }
+        
         if (_current is null)
         {
             throw new InvalidOperationException("Machine has no current state. Call >>build<< before calling this method.");
@@ -463,7 +538,7 @@ public class StateMachine
             TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.NoHandler));
             return;
         }
-
+        
         if (handler.Guard is { } g && !g(payload))
         {
             TriggerFailurePolicy.Handle(new TriggerFailureInfo(_current.Type, trigger, TriggerFailureReason.GuardFailed));
@@ -484,7 +559,7 @@ public class StateMachine
 
         if (!_ruleMaster.IsAllowedTransition(_current, target))
         {
-            FailurePolicy.Handle(new TransitionFailureInfo(_current.Type, handler.Target));
+            FailurePolicy.Handle(new TransitionFailureInfo(_current.Type, handler.Target, TransitionFailureReason.BlockedByRule));
             return;
         }
 
@@ -506,7 +581,7 @@ public class StateMachine
     {
         while (_triggerQueue.Count > 0)
         {
-            var(trigger, payload) = _triggerQueue.Dequeue();
+            var (trigger, payload) = _triggerQueue.Dequeue();
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();

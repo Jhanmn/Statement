@@ -5,7 +5,7 @@ namespace Statement.Failures;
 /// <summary>
 /// Describes a fired trigger that did not produce a transition.
 /// </summary>
-public sealed class TriggerFailureInfo
+public sealed record TriggerFailureInfo
 {
     /// <summary>
     /// The state the machine was in when the trigger was fired.

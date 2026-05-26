@@ -17,5 +17,8 @@ public enum TriggerFailureReason
     /// failure is reported through the failure policy so that remaining queued triggers
     /// can still be processed.
     /// </summary>
-    HandlerThrew
+    HandlerThrew,
+
+    /// <summary>The trigger was skipped because the machine's <see cref="StateMachineState"/> is <see cref="StateMachineState.Paused"/>.</summary>
+    MachinePaused,
 }
