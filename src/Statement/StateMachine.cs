@@ -121,6 +121,7 @@ public class StateMachine
     /// <exception cref="OperationCanceledException">Thrown if <paramref name="cancellationToken"/> is canceled before the transition starts, or surfaced from a user callback that observes the token.</exception>
     public Task SetCurrentStateAsync<T>(object? payload, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), typeof(T)))
         {
             return Task.CompletedTask;
@@ -136,11 +137,6 @@ public class StateMachine
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), stateType))
-        {
-            return;
-        }
-
         if (!ExecutionState.ReportIfPausedAndBlock(FailurePolicy, _current?.GetType(), stateType))
         {
             return;
@@ -474,7 +470,7 @@ public class StateMachine
     /// <exception cref="InvalidOperationException">Thrown if the machine has no current state (i.e., the builder's <c>Build</c> step has not run).</exception>
     public bool CanFire(object trigger, object? payload)
     {
-        if (!ExecutionState.ReportIfPausedAndBlock(TriggerFailurePolicy, _current?.GetType(), trigger))
+        if (ExecutionState == StateMachineState.Paused)
         {
             return false;
         }
